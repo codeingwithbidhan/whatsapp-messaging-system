@@ -221,7 +221,8 @@ const MessageArea = () => {
     const processedFiles = files.map(file => ({
       ...file,
       url: URL.createObjectURL(file),
-      id: Date.now() + Math.random()
+      id: Date.now() + Math.random(),
+      type: file.type // Ensure type is preserved
     }));
     
     setUploadedFiles(prev => [...prev, ...processedFiles]);
@@ -258,6 +259,27 @@ const MessageArea = () => {
     
     const currentIndex = mediaMessages.findIndex(msg => msg.id === message.id);
     openMediaViewer(mediaFiles, currentIndex);
+  };
+
+  const handleUploadedFileClick = (file, index) => {
+    // Create media files array from uploaded files (only images and videos)
+    const mediaFiles = uploadedFiles
+      .filter(f => {
+        const fileType = f.type || '';
+        return fileType.startsWith('image/') || fileType.startsWith('video/');
+      })
+      .map(f => ({
+        url: f.url,
+        name: f.name,
+        type: f.type
+      }));
+    
+    // Find the index of the clicked file in the media files array
+    const mediaIndex = mediaFiles.findIndex(f => f.url === file.url);
+    
+    if (mediaIndex !== -1) {
+      openMediaViewer(mediaFiles, mediaIndex);
+    }
   };
 
   const formatFileSize = (bytes) => {
@@ -395,20 +417,40 @@ const MessageArea = () => {
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {uploadedFiles.map((file) => {
+            {uploadedFiles.map((file, index) => {
               const fileType = file.type || '';
               return (
                 <div key={file.id} className="relative group">
-                  <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden border">
+                  <div 
+                    className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden border cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => {
+                      if (fileType.startsWith('image/') || fileType.startsWith('video/')) {
+                        handleUploadedFileClick(file, index);
+                      }
+                    }}
+                  >
                     {fileType.startsWith('image/') ? (
                       <img
                         src={file.url}
                         alt={file.name}
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Image failed to load:', file.url);
+                          e.target.style.display = 'none';
+                        }}
                       />
                     ) : fileType.startsWith('video/') ? (
-                      <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                        <Video className="w-6 h-6 text-gray-600" />
+                      <div className="w-full h-full bg-gray-300 flex items-center justify-center relative">
+                        <video
+                          src={file.url}
+                          className="w-full h-full object-cover"
+                          muted
+                        />
+                        <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
+                          <div className="bg-white bg-opacity-90 rounded-full p-1">
+                            <Video className="w-4 h-4 text-gray-800" />
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div className="w-full h-full bg-gray-300 flex items-center justify-center">
