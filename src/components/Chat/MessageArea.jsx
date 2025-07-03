@@ -111,6 +111,7 @@ const MessageArea = () => {
           fileUrl: file.url,
           fileName: file.name,
           fileSize: formatFileSize(file.size),
+          fileType: file.type, // Add this to preserve file type
           replyTo: replyingTo ? {
             id: replyingTo.id,
             content: replyingTo.content,
@@ -245,22 +246,6 @@ const MessageArea = () => {
     setShowMediaViewer(true);
   };
 
-  const handleMediaClick = (message) => {
-    // Find all media messages in the current chat
-    const mediaMessages = chatMessages.filter(msg => 
-      msg.type === 'image' || msg.type === 'video'
-    );
-    
-    const mediaFiles = mediaMessages.map(msg => ({
-      url: msg.fileUrl,
-      name: msg.fileName || 'Media file',
-      type: msg.type === 'image' ? 'image/jpeg' : 'video/mp4'
-    }));
-    
-    const currentIndex = mediaMessages.findIndex(msg => msg.id === message.id);
-    openMediaViewer(mediaFiles, currentIndex);
-  };
-
   const handleUploadedFileClick = (file, index) => {
     // Create media files array from uploaded files (only images and videos)
     const mediaFiles = uploadedFiles
@@ -280,6 +265,22 @@ const MessageArea = () => {
     if (mediaIndex !== -1) {
       openMediaViewer(mediaFiles, mediaIndex);
     }
+  };
+
+  const handleMediaClick = (message) => {
+    // Find all media messages in the current chat
+    const mediaMessages = chatMessages.filter(msg => 
+      msg.type === 'image' || msg.type === 'video'
+    );
+    
+    const mediaFiles = mediaMessages.map(msg => ({
+      url: msg.fileUrl,
+      name: msg.fileName || 'Media file',
+      type: msg.fileType || (msg.type === 'image' ? 'image/jpeg' : 'video/mp4') // Use fileType if available, fallback to type
+    }));
+    
+    const currentIndex = mediaMessages.findIndex(msg => msg.id === message.id);
+    openMediaViewer(mediaFiles, currentIndex);
   };
 
   const formatFileSize = (bytes) => {

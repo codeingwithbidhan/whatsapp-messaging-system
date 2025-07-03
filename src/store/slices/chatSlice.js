@@ -138,7 +138,7 @@ export const fetchMessages = createAsyncThunk(
 
 export const sendMessage = createAsyncThunk(
   'chat/sendMessage',
-  async ({ chatId, content, type = 'text', replyTo = null }, { rejectWithValue, getState }) => {
+  async (messageData, { rejectWithValue, getState }) => {
     try {
       // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -146,14 +146,21 @@ export const sendMessage = createAsyncThunk(
       const { auth } = getState();
       const newMessage = {
         id: Date.now().toString(),
-        content,
-        type,
+        content: messageData.content,
+        type: messageData.type || 'text',
         sender: auth.user,
-        chatId,
+        chatId: messageData.chatId,
         status: 'sent',
         createdAt: new Date().toISOString(),
-        replyTo,
-        reactions: []
+        replyTo: messageData.replyTo || null,
+        reactions: [],
+        // Include file-related fields if present
+        ...(messageData.fileUrl && {
+          fileUrl: messageData.fileUrl,
+          fileName: messageData.fileName,
+          fileSize: messageData.fileSize,
+          fileType: messageData.fileType, // Preserve the original file type
+        })
       };
       
       return newMessage;
