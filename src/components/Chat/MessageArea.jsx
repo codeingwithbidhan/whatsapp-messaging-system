@@ -10,7 +10,8 @@ import {
   Mic,
   Smile,
   Image,
-  X
+  X,
+  Play
 } from 'lucide-react';
 import { fetchMessages, sendMessage } from '../../store/slices/chatSlice';
 import { setSidebarOpen } from '../../store/slices/uiSlice';
@@ -37,6 +38,7 @@ const MessageArea = () => {
   const [showMediaViewer, setShowMediaViewer] = useState(false);
   const [mediaViewerFiles, setMediaViewerFiles] = useState([]);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(0);
+  const [videoThumbnails, setVideoThumbnails] = useState({});
   
   const messageListRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -52,6 +54,84 @@ const MessageArea = () => {
     : null;
   
   const isParticipantOnline = participant ? onlineUsers.includes(participant.id) : false;
+
+  // Function to generate video thumbnail
+  const generateVideoThumbnail = (videoFile, videoUrl) => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      video.addEventListener('loadedmetadata', () => {
+        // Set canvas dimensions to match video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Seek to 1 second or 10% of video duration, whichever is smaller
+        const seekTime = Math.min(1, video.duration * 0.1);
+        video.currentTime = seekTime;
+      });
+      
+      video.addEventListener('seeked', () => {
+        // Draw the video frame to canvas
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Convert canvas to blob URL
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const thumbnailUrl = URL.createObjectURL(blob);
+            resolve(thumbnailUrl);
+          } else {
+            resolve(null);
+          }
+        }, 'image/jpeg', 0.8);
+      });
+      
+      video.addEventListener('error', () => {
+        resolve(null);
+      });
+      
+      video.src = videoUrl;
+      video.load();
+    });
+  };
+
+  // Generate thumbnails for uploaded videos
+  useEffect(() => {
+    const generateThumbnails = async () => {
+      const newThumbnails = {};
+      
+      for (const file of uploadedFiles) {
+        if (file.type?.startsWith('video/') && !videoThumbnails[file.id]) {
+          try {
+            const thumbnail = await generateVideoThumbnail(file, file.url);
+            if (thumbnail) {
+              newThumbnails[file.id] = thumbnail;
+            }
+          } catch (error) {
+            console.error('Failed to generate thumbnail for video:', error);
+          }
+        }
+      }
+      
+      if (Object.keys(newThumbnails).length > 0) {
+        setVideoThumbnails(prev => ({ ...prev, ...newThumbnails }));
+      }
+    };
+    
+    generateThumbnails();
+  }, [uploadedFiles]);
+
+  // Cleanup video thumbnails when files are removed
+  useEffect(() => {
+    return () => {
+      Object.values(videoThumbnails).forEach(url => {
+        if (url && url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, []);
 
   useEffect(() => {
     if (activeChat) {
@@ -112,6 +192,7 @@ const MessageArea = () => {
           fileName: file.name,
           fileSize: formatFileSize(file.size),
           fileType: file.type, // Add this to preserve file type
+          thumbnailUrl: fileType.startsWith('video/') ? videoThumbnails[file.id] : null, // Add thumbnail for videos
           replyTo: replyingTo ? {
             id: replyingTo.id,
             content: replyingTo.content,
@@ -127,6 +208,13 @@ const MessageArea = () => {
       }
       
       setUploadedFiles([]);
+      // Clean up video thumbnails
+      Object.values(videoThumbnails).forEach(url => {
+        if (url && url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+      setVideoThumbnails({});
     } else {
       // Handle text message
       const messageData = {
@@ -238,6 +326,16 @@ const MessageArea = () => {
       }
       return prev.filter(file => file.id !== fileId);
     });
+    
+    // Clean up video thumbnail if exists
+    if (videoThumbnails[fileId]) {
+      URL.revokeObjectURL(videoThumbnails[fileId]);
+      setVideoThumbnails(prev => {
+        const newThumbnails = { ...prev };
+        delete newThumbnails[fileId];
+        return newThumbnails;
+      });
+    }
   };
 
   const openMediaViewer = (files, index = 0) => {
@@ -420,6 +518,8 @@ const MessageArea = () => {
           <div className="flex flex-wrap gap-2">
             {uploadedFiles.map((file, index) => {
               const fileType = file.type || '';
+              const thumbnail = videoThumbnails[file.id];
+              
               return (
                 <div key={file.id} className="relative group">
                   <div 
@@ -442,14 +542,23 @@ const MessageArea = () => {
                       />
                     ) : fileType.startsWith('video/') ? (
                       <div className="w-full h-full bg-gray-300 flex items-center justify-center relative">
-                        <video
-                          src={file.url}
-                          className="w-full h-full object-cover"
-                          muted
-                        />
+                        {thumbnail ? (
+                          <img
+                            src={thumbnail}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <video
+                            src={file.url}
+                            className="w-full h-full object-cover"
+                            muted
+                            preload="metadata"
+                          />
+                        )}
                         <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
                           <div className="bg-white bg-opacity-90 rounded-full p-1">
-                            <Video className="w-4 h-4 text-gray-800" />
+                            <Play className="w-4 h-4 text-gray-800" />
                           </div>
                         </div>
                       </div>

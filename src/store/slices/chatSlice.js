@@ -160,6 +160,7 @@ export const sendMessage = createAsyncThunk(
           fileName: messageData.fileName,
           fileSize: messageData.fileSize,
           fileType: messageData.fileType, // Preserve the original file type
+          thumbnailUrl: messageData.thumbnailUrl, // Add thumbnail URL for videos
         })
       };
       

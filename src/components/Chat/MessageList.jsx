@@ -441,11 +441,20 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                   className="relative cursor-pointer rounded-lg overflow-hidden group"
                                   onClick={() => handleMediaClick(message)}
                                 >
-                                  <video
-                                    src={message.fileUrl}
-                                    className="rounded-lg max-w-full h-auto"
-                                    poster={message.thumbnailUrl}
-                                  />
+                                  {message.thumbnailUrl ? (
+                                    <img
+                                      src={message.thumbnailUrl}
+                                      alt="Video thumbnail"
+                                      className="rounded-lg max-w-full h-auto"
+                                    />
+                                  ) : (
+                                    <video
+                                      src={message.fileUrl}
+                                      className="rounded-lg max-w-full h-auto"
+                                      poster={message.thumbnailUrl}
+                                      preload="metadata"
+                                    />
+                                  )}
                                   <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center group-hover:bg-opacity-40 transition-all">
                                     <div className="bg-white bg-opacity-90 rounded-full p-3">
                                       <Play className="w-6 h-6 text-gray-800" />
