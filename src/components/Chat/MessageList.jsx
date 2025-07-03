@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { Check, CheckCheck, Clock, Reply, Heart, ThumbsUp, Laugh, Angry, Salad as Sad, MoreHorizontal, Play } from 'lucide-react';
+import { Check, CheckCheck, Clock, Reply, Heart, ThumbsUp, Laugh, Angry, Salad as Sad, MoreHorizontal, Play, Download, FileText, File, Image as ImageIcon } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 
 const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick }, ref) => {
@@ -161,6 +161,68 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
     if (onMediaClick) {
       onMediaClick(message);
     }
+  };
+
+  const handleFileDownload = (message) => {
+    const link = document.createElement('a');
+    link.href = message.fileUrl;
+    link.download = message.fileName || 'download';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const getFileIcon = (fileName, fileType) => {
+    const extension = fileName?.split('.').pop()?.toLowerCase();
+    const type = fileType?.toLowerCase();
+    
+    // PDF files
+    if (extension === 'pdf' || type?.includes('pdf')) {
+      return <FileText className="w-8 h-8 text-red-500" />;
+    }
+    
+    // Word documents
+    if (['doc', 'docx'].includes(extension) || type?.includes('word') || type?.includes('document')) {
+      return <FileText className="w-8 h-8 text-blue-500" />;
+    }
+    
+    // Excel files
+    if (['xls', 'xlsx'].includes(extension) || type?.includes('excel') || type?.includes('spreadsheet')) {
+      return <FileText className="w-8 h-8 text-green-500" />;
+    }
+    
+    // PowerPoint files
+    if (['ppt', 'pptx'].includes(extension) || type?.includes('powerpoint') || type?.includes('presentation')) {
+      return <FileText className="w-8 h-8 text-orange-500" />;
+    }
+    
+    // Text files
+    if (['txt', 'rtf'].includes(extension) || type?.includes('text')) {
+      return <FileText className="w-8 h-8 text-gray-500" />;
+    }
+    
+    // Archive files
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension) || type?.includes('zip') || type?.includes('archive')) {
+      return <File className="w-8 h-8 text-purple-500" />;
+    }
+    
+    // Default file icon
+    return <File className="w-8 h-8 text-gray-500" />;
+  };
+
+  const getFileTypeLabel = (fileName, fileType) => {
+    const extension = fileName?.split('.').pop()?.toLowerCase();
+    const type = fileType?.toLowerCase();
+    
+    if (extension === 'pdf' || type?.includes('pdf')) return 'PDF Document';
+    if (['doc', 'docx'].includes(extension) || type?.includes('word')) return 'Word Document';
+    if (['xls', 'xlsx'].includes(extension) || type?.includes('excel')) return 'Excel Spreadsheet';
+    if (['ppt', 'pptx'].includes(extension) || type?.includes('powerpoint')) return 'PowerPoint Presentation';
+    if (['txt', 'rtf'].includes(extension) || type?.includes('text')) return 'Text Document';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) return 'Archive File';
+    
+    return 'Document';
   };
 
   // Handle scroll to update sticky date
@@ -470,13 +532,43 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                             )}
                             
                             {message.type === 'file' && (
-                              <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded">
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium">{message.fileName}</p>
-                                  <p className="text-xs text-gray-500">{message.fileSize}</p>
+                              <div className={`flex items-center space-x-3 p-3 rounded-lg border-2 border-dashed transition-colors hover:bg-opacity-80 ${
+                                isOwnMessage 
+                                  ? 'bg-green-400 bg-opacity-20 border-green-300' 
+                                  : 'bg-gray-100 border-gray-300'
+                              }`}>
+                                <div className="flex-shrink-0">
+                                  {getFileIcon(message.fileName, message.fileType)}
                                 </div>
-                                <button className="text-blue-500 hover:text-blue-600">
-                                  Download
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium truncate ${
+                                    isOwnMessage ? 'text-white' : 'text-gray-800'
+                                  }`}>
+                                    {message.fileName || 'Unknown file'}
+                                  </p>
+                                  <p className={`text-xs ${
+                                    isOwnMessage ? 'text-green-100' : 'text-gray-500'
+                                  }`}>
+                                    {getFileTypeLabel(message.fileName, message.fileType)}
+                                  </p>
+                                  {message.fileSize && (
+                                    <p className={`text-xs ${
+                                      isOwnMessage ? 'text-green-100' : 'text-gray-500'
+                                    }`}>
+                                      {message.fileSize}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => handleFileDownload(message)}
+                                  className={`flex-shrink-0 p-2 rounded-full transition-colors ${
+                                    isOwnMessage 
+                                      ? 'bg-white bg-opacity-20 hover:bg-opacity-30 text-white' 
+                                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                  }`}
+                                  title="Download file"
+                                >
+                                  <Download className="w-4 h-4" />
                                 </button>
                               </div>
                             )}
@@ -489,6 +581,13 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                 <div className="flex-1 h-8 bg-gray-300 rounded-full"></div>
                                 <span className="text-xs text-gray-500">{message.duration}</span>
                               </div>
+                            )}
+
+                            {/* Caption for files */}
+                            {(message.type === 'file') && message.content && (
+                              <p className="text-sm whitespace-pre-wrap break-words mt-2">
+                                {message.content}
+                              </p>
                             )}
                           </div>
 

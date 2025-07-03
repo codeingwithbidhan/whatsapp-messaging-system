@@ -63,10 +63,10 @@ const FileUploadModal = ({ isOpen, onClose, onFileSelect, position }) => {
       title: 'Documents',
       icon: FileText,
       color: 'bg-green-500 hover:bg-green-600',
-      accept: '.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx',
+      accept: '.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.rtf,.odt,.ods,.odp',
       multiple: true,
       ref: documentInputRef,
-      description: 'Upload documents (PDF, DOC, XLS, etc.)'
+      description: 'Upload documents (PDF, DOC, XLS, PPT, etc.)'
     }
   ];
 
