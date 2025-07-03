@@ -103,10 +103,11 @@ const MessageArea = () => {
     // Handle file messages
     if (uploadedFiles.length > 0) {
       for (const file of uploadedFiles) {
+        const fileType = file.type || '';
         const messageData = {
           chatId: activeChat,
           content: messageInput.trim() || '',
-          type: file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file',
+          type: fileType.startsWith('image/') ? 'image' : fileType.startsWith('video/') ? 'video' : 'file',
           fileUrl: file.url,
           fileName: file.name,
           fileSize: formatFileSize(file.size),
@@ -394,33 +395,36 @@ const MessageArea = () => {
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {uploadedFiles.map((file) => (
-              <div key={file.id} className="relative group">
-                <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden border">
-                  {file.type.startsWith('image/') ? (
-                    <img
-                      src={file.url}
-                      alt={file.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : file.type.startsWith('video/') ? (
-                    <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                      <Video className="w-6 h-6 text-gray-600" />
-                    </div>
-                  ) : (
-                    <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                      <Paperclip className="w-6 h-6 text-gray-600" />
-                    </div>
-                  )}
+            {uploadedFiles.map((file) => {
+              const fileType = file.type || '';
+              return (
+                <div key={file.id} className="relative group">
+                  <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden border">
+                    {fileType.startsWith('image/') ? (
+                      <img
+                        src={file.url}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : fileType.startsWith('video/') ? (
+                      <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                        <Video className="w-6 h-6 text-gray-600" />
+                      </div>
+                    ) : (
+                      <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                        <Paperclip className="w-6 h-6 text-gray-600" />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => removeUploadedFile(file.id)}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => removeUploadedFile(file.id)}
-                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
