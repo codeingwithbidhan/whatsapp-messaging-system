@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Check, CheckCheck, Clock, Reply, Heart, ThumbsUp, Laugh, Angry, Salad as Sad, MoreHorizontal, Play, Download, FileText, File, Image as ImageIcon } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
+import VoicePlayer from './VoicePlayer';
 
 const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick }, ref) => {
   const [stickyDate, setStickyDate] = useState('');
@@ -574,13 +575,16 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                             )}
                             
                             {message.type === 'voice' && (
-                              <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded">
-                                <button className="text-blue-500 hover:text-blue-600">
-                                  ▶️
-                                </button>
-                                <div className="flex-1 h-8 bg-gray-300 rounded-full"></div>
-                                <span className="text-xs text-gray-500">{message.duration}</span>
-                              </div>
+                              <VoicePlayer
+                                audioUrl={message.fileUrl}
+                                duration={message.duration}
+                                isOwnMessage={isOwnMessage}
+                                className={`${
+                                  isOwnMessage 
+                                    ? 'bg-green-400 bg-opacity-20' 
+                                    : 'bg-gray-100'
+                                } rounded-lg`}
+                              />
                             )}
 
                             {/* Caption for files */}

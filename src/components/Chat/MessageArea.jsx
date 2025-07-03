@@ -21,6 +21,7 @@ import MessageList from './MessageList';
 import EmojiPicker from './EmojiPicker';
 import FileUploadModal from './FileUploadModal';
 import MediaViewer from './MediaViewer';
+import VoiceRecorder from './VoiceRecorder';
 
 const MessageArea = () => {
   const dispatch = useDispatch();
@@ -39,6 +40,7 @@ const MessageArea = () => {
   const [mediaViewerFiles, setMediaViewerFiles] = useState([]);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(0);
   const [videoThumbnails, setVideoThumbnails] = useState({});
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   
   const messageListRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -404,6 +406,48 @@ const MessageArea = () => {
     }
   };
 
+  const handleVoiceRecordStart = () => {
+    setShowVoiceRecorder(true);
+    setShowEmojiPicker(false);
+  };
+
+  const handleVoiceSend = async (voiceMessage) => {
+    try {
+      // Create a file from the audio blob
+      const audioFile = new File([voiceMessage.audioBlob], `voice_${Date.now()}.webm`, {
+        type: voiceMessage.audioBlob.type
+      });
+
+      const messageData = {
+        chatId: activeChat,
+        content: '',
+        type: 'voice',
+        fileUrl: voiceMessage.audioUrl,
+        fileName: audioFile.name,
+        fileSize: formatFileSize(voiceMessage.audioBlob.size),
+        fileType: voiceMessage.audioBlob.type,
+        duration: voiceMessage.duration,
+        replyTo: replyingTo ? {
+          id: replyingTo.id,
+          content: replyingTo.content,
+          sender: replyingTo.sender
+        } : null,
+      };
+
+      await dispatch(sendMessage(messageData)).unwrap();
+      setReplyingTo(null);
+      
+      // Auto-scroll to bottom
+      setTimeout(() => {
+        if (messageListRef.current?.scrollToBottom) {
+          messageListRef.current.scrollToBottom();
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Failed to send voice message:', error);
+    }
+  };
+
   if (!currentChat) {
     return null;
   }
@@ -664,7 +708,9 @@ const MessageArea = () => {
           ) : (
             <button
               type="button"
+              onClick={handleVoiceRecordStart}
               className="p-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full transition-colors"
+              title="Record voice message"
             >
               <Mic className="w-5 h-5" />
             </button>
@@ -686,6 +732,13 @@ const MessageArea = () => {
         onClose={() => setShowMediaViewer(false)}
         files={mediaViewerFiles}
         initialIndex={mediaViewerIndex}
+      />
+
+      {/* Voice Recorder */}
+      <VoiceRecorder
+        isOpen={showVoiceRecorder}
+        onClose={() => setShowVoiceRecorder(false)}
+        onSend={handleVoiceSend}
       />
     </div>
   );
