@@ -2,9 +2,13 @@ import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } f
 import { Check, CheckCheck, Clock, Reply, Heart, ThumbsUp, Laugh, Angry, Salad as Sad, MoreHorizontal, Play, Download, FileText, File, Image as ImageIcon } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import VoicePlayer from './VoicePlayer';
+import {addReaction, sendMessage} from "../../store/slices/chatSlice.js";
+import {useDispatch, useSelector} from 'react-redux';
 
 const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick }, ref) => {
+  const dispatch = useDispatch();
   const [stickyDate, setStickyDate] = useState('');
+  const { activeChat } = useSelector((state) => state.chat);
   const [showStickyHeader, setShowStickyHeader] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showReactionPicker, setShowReactionPicker] = useState(null);
@@ -58,13 +62,13 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
   const getMessageStatusIcon = (status) => {
     switch (status) {
       case 'sent':
-        return <Check className="w-4 h-4 text-gray-400" />;
+        return <Check className="w-2 h-2 text-gray-400" />;
       case 'delivered':
-        return <CheckCheck className="w-4 h-4 text-gray-400" />;
+        return <CheckCheck className="w-2 h-2 text-gray-400" />;
       case 'read':
-        return <CheckCheck className="w-4 h-4 text-blue-500" />;
+        return <CheckCheck className="w-2 h-2 text-blue-500" />;
       default:
-        return <Clock className="w-4 h-4 text-gray-400" />;
+        return <Clock className="w-2 h-2 text-gray-400" />;
     }
   };
 
@@ -85,8 +89,8 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
     let currentGroup = null;
     
     messages.forEach((message) => {
-      const messageDate = format(new Date(message.createdAt), 'yyyy-MM-dd');
-      
+      const messageDate = format(new Date(message.created_at), 'yyyy-MM-dd');
+
       if (!currentGroup || currentGroup.date !== messageDate) {
         currentGroup = {
           date: messageDate,
@@ -103,7 +107,7 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
 
   const getDateLabel = (dateString) => {
     const date = new Date(dateString);
-    
+
     if (isToday(date)) {
       return 'Today';
     } else if (isYesterday(date)) {
@@ -117,9 +121,20 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
     setSelectedMessage(message);
   };
 
-  const handleReaction = (messageId, reaction) => {
+  const handleReaction = async (messageId, reaction) => {
     // Mock reaction handling - in real app, this would call an API
     console.log('Adding reaction:', { messageId, reaction });
+    const messageReactionData = {
+      chatId: activeChat,
+      message_id: messageId,
+      reaction: reaction,
+    };
+
+    try {
+      await dispatch(addReaction(messageReactionData)).unwrap();
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
     setShowReactionPicker(null);
   };
 
@@ -243,12 +258,12 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
     }
 
     // Show sticky header when scrolling up from bottom
-    if (scrollTop > 100) {
-      setShowStickyHeader(true);
-    } else {
-      setShowStickyHeader(false);
-      return;
-    }
+    // if (scrollTop > 100) {
+    //   setShowStickyHeader(true);
+    // } else {
+    //   setShowStickyHeader(false);
+    //   return;
+    // }
 
     // Find which date section is currently at the top of the viewport
     let currentVisibleDate = '';
@@ -347,13 +362,13 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
   return (
     <div className="relative h-full">
       {/* Sticky Date Header - Fixed positioning */}
-      {showStickyHeader && stickyDate && (
-        <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 pointer-events-none">
-          <div className="bg-green-500 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg border border-green-600 animate-fade-in pointer-events-auto">
-            {getDateLabel(stickyDate)}
-          </div>
-        </div>
-      )}
+      {/*{showStickyHeader && stickyDate && (*/}
+      {/*  <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 pointer-events-none">*/}
+      {/*    <div className="bg-green-500 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg border border-green-600 animate-fade-in pointer-events-auto">*/}
+      {/*      {getDateLabel(stickyDate)}*/}
+      {/*    </div>*/}
+      {/*  </div>*/}
+      {/*)}*/}
 
       {/* Messages Container */}
       <div 
@@ -361,7 +376,7 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
         className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent scroll-smooth"
         style={{ paddingTop: showStickyHeader ? '60px' : '0' }}
       >
-        <div className="p-4 space-y-6">
+        <div className="pl-4 pr-4 pb-4 space-y-6">
           {messageGroups.map((group, groupIndex) => (
             <div 
               key={group.date} 
@@ -404,30 +419,31 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                         isOwnMessage ? 'order-2' : 'order-1'
                       } relative`}>
                         {/* Reply Preview */}
-                        {message.replyTo && (
+                        { message.replyTo && (
                           <div 
                             onClick={() => handleReplyClick(message.replyTo)}
-                            className={`mb-2 p-2 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors ${
+                            className={`mb-0 p-1 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors ${
                               isOwnMessage 
                                 ? 'bg-green-50 border-green-400 ml-4' 
                                 : 'bg-gray-50 border-gray-400 mr-4'
                             }`}
                           >
-                            <p className="text-xs font-medium text-gray-600 mb-1">
+                            <p className="text-xs font-medium text-gray-600 mb-0">
                               {message.replyTo.sender?.name}
                             </p>
-                            <p className="text-sm text-gray-700 truncate">
-                              {message.replyTo.content}
+                            <p className="text-xs text-gray-700 truncate">
+                              {message.replyTo.message}
                             </p>
                           </div>
                         )}
 
                         <div
-                          className={`rounded-2xl px-4 py-2 transition-all duration-200 ${
+                          className={`rounded-2xl px-2 py-1 transition-all duration-200 ${
                             isOwnMessage
-                              ? 'bg-green-500 text-white'
+                              ? 'bg-green-200 text-black'
                               : 'bg-white border border-gray-200 text-gray-800 shadow-sm'
-                          } ${
+                          }
+                          ${
                             // Adjust border radius for message grouping
                             isOwnMessage
                               ? isFirstInGroup
@@ -444,7 +460,8 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                 : isLastInGroup
                                 ? 'rounded-2xl rounded-tl-md'
                                 : 'rounded-l-md rounded-r-2xl'
-                          }`}
+                          }
+                          `}
                           onContextMenu={(e) => {
                             e.preventDefault();
                             handleMessageLongPress(message);
@@ -474,7 +491,7 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                           <div className="space-y-2">
                             {message.type === 'text' && (
                               <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-                                {message.content}
+                                {message.message}
                               </p>
                             )}
                             
@@ -490,9 +507,9 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                     className="rounded-lg max-w-full h-auto hover:opacity-90 transition-opacity"
                                   />
                                 </div>
-                                {message.content && (
+                                {message.message && (
                                   <p className="text-sm whitespace-pre-wrap break-words">
-                                    {message.content}
+                                    {message.message}
                                   </p>
                                 )}
                               </div>
@@ -524,9 +541,9 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                     </div>
                                   </div>
                                 </div>
-                                {message.content && (
+                                {message.message && (
                                   <p className="text-sm whitespace-pre-wrap break-words">
-                                    {message.content}
+                                    {message.message}
                                   </p>
                                 )}
                               </div>
@@ -588,35 +605,20 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                             )}
 
                             {/* Caption for files */}
-                            {(message.type === 'file') && message.content && (
+                            {(message.type === 'file') && message.message && (
                               <p className="text-sm whitespace-pre-wrap break-words mt-2">
-                                {message.content}
+                                { message.message }
                               </p>
                             )}
                           </div>
 
-                          {/* Reactions */}
-                          {message.reactions && message.reactions.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {message.reactions.map((reaction, index) => (
-                                <div
-                                  key={index}
-                                  className="bg-white bg-opacity-20 rounded-full px-2 py-1 text-xs flex items-center space-x-1"
-                                >
-                                  <span>{reaction.emoji}</span>
-                                  <span className="text-xs">{reaction.count}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
                           {/* Message metadata - only show on last message in group */}
                           {isLastInGroup && (
-                            <div className={`flex items-center justify-end space-x-1 mt-2 ${
+                            <div className={`flex items-center justify-end space-x-1 ${
                               isOwnMessage ? 'text-green-100' : 'text-gray-500'
                             }`}>
                               <span className="text-xs">
-                                {formatMessageTime(message.createdAt)}
+                                {formatMessageTime(message.created_at)}
                               </span>
                               {isOwnMessage && (
                                 <div className="flex-shrink-0">
@@ -657,7 +659,7 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                   {reactions.map((reaction) => (
                                     <button
                                       key={reaction.name}
-                                      onClick={() => handleReaction(message.id, reaction)}
+                                      onClick={() => handleReaction(message.id, reaction.name)}
                                       className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-lg"
                                       title={reaction.name}
                                     >
@@ -689,10 +691,10 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                             <Reply className="w-3 h-3 text-gray-600" />
                           </button>
                           
-                          {reactions.slice(0, 3).map((reaction) => (
+                          {reactions.map((reaction) => (
                             <button
                               key={reaction.name}
-                              onClick={() => handleReaction(message.id, reaction)}
+                              onClick={() => handleReaction(message.id, reaction.name)}
                               className="p-1 hover:bg-gray-100 rounded transition-colors text-sm"
                               title={reaction.name}
                             >
@@ -700,18 +702,34 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                             </button>
                           ))}
                         </div>
+                        {/* Reactions */}
+                        {message.reactions && message.reactions.length > 0 && (
+                            <div className="order-1 self-end">
+                              {message.reactions.map((reaction, index) => (
+                                  <div
+                                      key={index}
+                                      className="absolute left-1 bg-white p-1 rounded-full"
+                                      style={{ fontSize: '12px', padding: '0px', bottom: '-12px' }}
+                                  >
+                                    { reactions.find(r => r.name === reaction.emoji).emoji ?? reaction.emoji }
+                                    {/*<span className="text-xs">{message.count}</span>*/}
+                                  </div>
+                              ))}
+                            </div>
+                        )}
                       </div>
 
+
                       {/* Avatar for received messages - only show on last message in group */}
-                      {!isOwnMessage && isLastInGroup && (
-                        <div className="order-1 mr-2 flex-shrink-0 self-end">
-                          <img
-                            src={message.sender?.avatar || `https://ui-avatars.com/api/?name=${message.sender?.name}&background=6366f1&color=fff`}
-                            alt={message.sender?.name}
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
-                        </div>
-                      )}
+                      {/*{!isOwnMessage && isLastInGroup && (*/}
+                      {/*  <div className="order-1 mr-2 flex-shrink-0 self-end">*/}
+                      {/*    <img*/}
+                      {/*      src={message.sender?.avatar || `https://ui-avatars.com/api/?name=${message.sender?.name}&background=6366f1&color=fff`}*/}
+                      {/*      alt={message.sender?.name}*/}
+                      {/*      className="w-8 h-8 rounded-full object-cover"*/}
+                      {/*    />*/}
+                      {/*  </div>*/}
+                      {/*)}*/}
                     </div>
                   );
                 })}

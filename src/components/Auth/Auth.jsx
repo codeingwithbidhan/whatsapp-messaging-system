@@ -51,6 +51,7 @@ const Auth = () => {
           name: formData.name, 
           email: formData.email, 
           password: formData.password,
+          password_confirmation: formData.confirmPassword,
           phone: formData.phone 
         };
 

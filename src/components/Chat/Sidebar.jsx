@@ -15,6 +15,7 @@ import { logoutUser } from '../../store/slices/authSlice';
 import { setSidebarOpen } from '../../store/slices/uiSlice';
 import { formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
+import socketService from "../../socket/socket.js";
 
 const Sidebar = () => {
   const dispatch = useDispatch();
@@ -39,10 +40,12 @@ const Sidebar = () => {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = async (e) => {
+    e.preventDefault();
     try {
-      await dispatch(logoutUser()).unwrap();
-      toast.success('Logged out successfully');
+        await dispatch(logoutUser()).unwrap();
+        socketService.disconnect()
+        toast.success('Logged out successfully');
     } catch (error) {
       toast.error('Logout failed');
     }
@@ -51,7 +54,7 @@ const Sidebar = () => {
   const getLastMessageText = (chat) => {
     if (!chat.lastMessage) return 'No messages yet';
     
-    const { content, type, sender } = chat.lastMessage;
+    const { message, type, sender } = chat.lastMessage;
     const isOwnMessage = sender?.id === user?.id;
     const prefix = isOwnMessage ? 'You: ' : '';
     
@@ -65,7 +68,7 @@ const Sidebar = () => {
       case 'video':
         return `${prefix}🎥 Video`;
       default:
-        return `${prefix}${content}`;
+        return `${prefix}${message}`;
     }
   };
 
@@ -106,11 +109,12 @@ const Sidebar = () => {
             
             {showUserMenu && (
               <div className="absolute right-0 top-12 bg-white rounded-lg shadow-lg border py-2 w-48 z-10">
-                <button className="flex items-center px-4 py-2 hover:bg-gray-100 w-full text-left text-gray-700">
+                <button type={"button"} className="flex items-center px-4 py-2 hover:bg-gray-100 w-full text-left text-gray-700">
                   <Settings className="w-4 h-4 mr-3" />
                   Settings
                 </button>
-                <button 
+                <button
+                  type="button"
                   onClick={handleLogout}
                   className="flex items-center px-4 py-2 hover:bg-gray-100 w-full text-left text-red-600"
                 >
@@ -166,13 +170,13 @@ const Sidebar = () => {
           filteredChats.map((chat) => {
             const participant = getChatParticipant(chat);
             const isOnline = participant ? isUserOnline(participant.id) : false;
-            
+
             return (
               <div
-                key={chat.id}
-                onClick={() => handleChatSelect(chat.id)}
+                key={chat.chatId}
+                onClick={() => handleChatSelect(chat.chatId)}
                 className={`p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition-colors active:bg-gray-100 ${
-                  activeChat === chat.id ? 'bg-green-50 border-green-200' : ''
+                  activeChat === chat.chatId ? 'bg-green-50 border-green-200' : ''
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -197,11 +201,11 @@ const Sidebar = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <h4 className="font-semibold text-gray-800 truncate text-lg">
-                        {chat.name || participant?.name || 'Unknown'}
+                        { chat.name || participant?.name || 'Unknown'}
                       </h4>
                       {chat.lastMessage && (
                         <span className="text-xs text-gray-500">
-                          {formatDistanceToNow(new Date(chat.lastMessage.createdAt), { addSuffix: true })}
+                          {formatDistanceToNow(new Date(chat.lastMessage.created_at), { addSuffix: true })}
                         </span>
                       )}
                     </div>
@@ -220,7 +224,7 @@ const Sidebar = () => {
                     
                     {chat.typing && chat.typing.length > 0 && (
                       <p className="text-xs text-green-600 mt-1 font-medium">
-                        {chat.typing.length === 1 ? 'typing...' : `${chat.typing.length} people typing...`}
+                        { chat.typing.length === 1 && chat.typing.length !== 0 ? chat.name + ' is typing...' : `${chat.typing.length} people typing...`}
                       </p>
                     )}
                   </div>

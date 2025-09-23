@@ -24,8 +24,8 @@ const localStorageMock = {
 };
 global.localStorage = localStorageMock;
 
-// Mock socket.io-client
-vi.mock('socket.io-client', () => ({
+// Mock socket.js-client
+vi.mock('socket.js-client', () => ({
   io: vi.fn(() => ({
     on: vi.fn(),
     emit: vi.fn(),
