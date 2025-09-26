@@ -3,11 +3,13 @@ import authSlice from './slices/authSlice';
 import chatSlice from './slices/chatSlice';
 import socketSlice from './slices/socketSlice';
 import uiSlice from './slices/uiSlice';
+import callSlice from "./slices/callSlice.js";
 
 export const store = configureStore({
   reducer: {
     auth: authSlice,
     chat: chatSlice,
+    call: callSlice,
     socket: socketSlice,
     ui: uiSlice,
   },

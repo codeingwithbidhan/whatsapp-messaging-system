@@ -2,6 +2,7 @@
 import { io } from "socket.io-client";
 import store from '../store/store';
 import { setOnlineUsers, addMessage, updateMessageStatus, setTyping } from '../store/slices/chatSlice';
+import { setIncomingCall, setInitiateCall, setIsConnected } from '../store/slices/callSlice.js'
 import { toast } from 'react-hot-toast';
 
 // Node.js server এর URL
@@ -47,13 +48,21 @@ class SocketService {
 
         // Incoming call
         this.socket.on('incomingCall', ({ fromUserId, callType }) => {
-            toast.info(`Incoming ${callType} call from ${fromUserId}`);
+            // bidhan:1
+            store.dispatch(setIncomingCall({ fromUserId, callType }));
             // handle WebRTC signaling here
         });
 
         // Call answered
-        this.socket.on('callAnswered', ({ signalData }) => {
-            console.log('Call answered', signalData);
+        this.socket.on('callAccepted', ({ toUserId }) => {
+            store.dispatch(setIsConnected(true));
+            console.log('Call answered by ', toUserId );
+        });
+
+        // Call answered
+        this.socket.on('callRejected', ({ toUserId }) => {
+            store.dispatch(setInitiateCall(false));
+            console.log('Call rejected from', toUserId );
         });
 
         // Call ended
@@ -91,13 +100,21 @@ class SocketService {
     }
 
     initiateCall(fromUserId, toUserId, callType) {
+        // fromUserId = bidhan:1, toUserId = niloy:2
+        store.dispatch(setInitiateCall(true));
         this.socket?.emit('callUser', { fromUserId, toUserId, callType });
     }
 
-    answerCall(toUserId, signalData) {
-        this.socket?.emit('answerCall', { toUserId, signalData });
+    acceptCall(fromUserId, toUserId) {
+        console.log('fromUserId, toUserId', fromUserId, toUserId)
+        // fromUserId = bidhan:1, toUserId: niloy:2
+        this.socket?.emit("acceptCall", { fromUserId, toUserId });
     }
-
+    // 🟢 কল reject
+    rejectCall(fromUserId, toUserId) {
+        // fromUserId = bidhan:1, toUserId: niloy:2
+        this.socket?.emit("rejectCall", { fromUserId, toUserId });
+    }
     endCall(toUserId) {
         this.socket?.emit('endCall', { toUserId });
     }
