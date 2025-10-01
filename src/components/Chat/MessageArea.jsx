@@ -2,7 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {  ArrowLeft,  Phone,  Video,  MoreVertical,  Send,  Paperclip,  Mic,  Smile,  Image,  X,  Play } from 'lucide-react';
 import { fetchMessages, sendMessage } from '../../store/slices/chatSlice';
-import { setInitiateCall, acceptCall, rejectCall } from "../../store/slices/callSlice.js";
+// import { setInitiateCall, acceptCall, rejectCall } from "../../store/slices/callSlice.js";
+import {
+  initiateCall,
+  acceptCall,
+  declineCall,
+  endCall,
+  toggleMute,
+  toggleVideo,
+  toggleSpeaker,
+  toggleMinimize,
+  setShowControls,
+  setCameraLoading,
+  setCameraError,
+  incrementCallDuration,
+  setCallStatus, setPeerConnection, setLocalStream
+} from '../../store/slices/callSlice';
 import { setSidebarOpen } from '../../store/slices/uiSlice';
 import { socketService } from '../../socket/socket.js';
 import { formatDistanceToNow } from 'date-fns';
@@ -12,7 +27,6 @@ import FileUploadModal from './FileUploadModal';
 import MediaViewer from './MediaViewer';
 import VoiceRecorder from './VoiceRecorder';
 import CallModal from "./CallModal.jsx";
-import IncomingCallModal from "./IncomingCallModal.jsx";
 
 const MessageArea = () => {
   const dispatch = useDispatch();
@@ -37,6 +51,7 @@ const MessageArea = () => {
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
   const paperclipButtonRef = useRef(null);
+  const callTimerRef = useRef(null);
 
   const currentChat = chats.find(chat => chat.chatId === activeChat);
   const chatMessages = messages[activeChat] || [];
@@ -45,9 +60,9 @@ const MessageArea = () => {
       : null;
   const isParticipantOnline = participant ? onlineUsers.includes(participant.id) : false;
 
-  const { isInitiateCall, incomingCall } = useSelector((state) => state.call )
-  const [showCallModal, setShowCallModal] = useState(false);
-  const [ initiateCallType, setInitiateCallType ] = useState(null)
+  const { activeCall,isCallModalOpen, callStatus, callType, callDuration, isMuted, isVideoEnabled, isSpeakerOn, isMinimized,
+    showControls, cameraError, isCameraLoading } = useSelector((state) => state.call);
+
   // Function to generate video thumbnail
   const generateVideoThumbnail = (videoFile, videoUrl) => {
     return new Promise((resolve) => {
@@ -135,10 +150,10 @@ const MessageArea = () => {
   useEffect(() => {
     if (activeChat) {
       dispatch(fetchMessages({ chatId: activeChat }));
-      socketService.joinChat(activeChat);
+      // socketService.joinChat(activeChat);
 
       return () => {
-        socketService.leaveChat(activeChat);
+        // socketService.leaveChat(activeChat);
       };
     }
   }, [activeChat, dispatch]);
@@ -169,6 +184,26 @@ const MessageArea = () => {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showFileUploadModal, showChatMenu]);
+
+  useEffect(() => {
+    // 1. যখন callStatus 'connected' হবে, তখন টাইমার শুরু করুন।
+    if (callStatus === 'connected') {
+      console.log('video call connected')
+      startCallTimer();
+    }
+    // 2. যখন callStatus 'ended' বা 'declined' হবে, তখন টাইমার বন্ধ করুন।
+    else if (callStatus === 'idle' || callStatus === 'ended' || callStatus === 'declined') {
+      stopCallTimer();
+    }
+
+    // cleanup function: কম্পোনেন্ট আনমাউন্ট হলে বা callStatus পরিবর্তন হলে টাইমার বন্ধ করবে
+    return () => {
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+        callTimerRef.current = null;
+      }
+    };
+  }, [callStatus]);
 
   const handleBackToContacts = () => {
     dispatch(setSidebarOpen(true));
@@ -257,11 +292,12 @@ const MessageArea = () => {
 
   const handleInputChange = (e) => {
     setMessageInput(e.target.value);
-    console.log('typing start => ', e.target.value)
     if (!isTyping) {
+      const senderId = user.id;
+      const receiverIds = currentChat.participants.filter(participant => participant.id !== user.id).map(participant => participant.id);
       setIsTyping(true);
-      const userId = currentChat.user_id
-      socketService.startTyping(activeChat, userId);
+      // Ex: activeChat = 1, participantIds = [1] for private if group participantIds = [1, 2]
+      socketService.startTyping(activeChat, senderId, receiverIds);
     }
 
     // Clear existing timeout
@@ -272,14 +308,15 @@ const MessageArea = () => {
     // Set new timeout
     typingTimeoutRef.current = setTimeout(() => {
       stopTyping();
-    }, 1000);
+    }, 3000);
   };
 
   const stopTyping = () => {
     if (isTyping) {
       setIsTyping(false);
-      const userId = currentChat.user_id
-      socketService.stopTyping(activeChat, userId);
+      const senderId = user.id;
+      const receiverIds = currentChat.participants.filter(participant => participant.id !== user.id).map(participant => participant.id);
+      socketService.stopTyping(activeChat, senderId, receiverIds);
     }
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -409,29 +446,95 @@ const MessageArea = () => {
     setReplyingTo(null);
   };
 
-  const initiateCall = (type) => {
+  const handleInitiateCall = async (type) => {
     if (participant) {
-      const fromUserId = user.id // Bidhan id = 1
-      const toUserId = participant.id // niloy id = 2
-      socketService.initiateCall(fromUserId, toUserId, type);
-      setInitiateCallType(type)
+      try {
+        await dispatch(initiateCall({
+          participantId: participant.id,
+          callType: type
+        })).unwrap();
+
+        // Start socket call
+        await  socketService.initiateCall(participant.id, type);
+      } catch (error) {
+        console.error('Failed to initiate call:', error);
+      }
     }
   };
-  const initiateCallModal = () => {
-    dispatch(setInitiateCall(false))
+
+  const handleAcceptCall = async () => {
+    if (activeCall) {
+      try {
+        const callerId = activeCall.callerId
+        await dispatch(acceptCall(callerId)).unwrap();
+        await socketService.handleOffer(activeCall.callerId, activeCall.offer, activeCall.callType === 'video');
+        // startCallTimer();
+        // কলারকে কল গৃহীত হওয়ার বার্তা দিন (যদি প্রয়োজন হয়)
+        // this.socket.emit('callAccepted', { toUserId: callerId });
+      } catch (error) {
+        console.error('Failed to accept call:', error);
+      }
+    }
   };
 
-  // কল accept
-  const handleAccept = () => {
-    dispatch(acceptCall({ fromUserId: incomingCall.fromUserId, callType:incomingCall.callType }));
-    socketService.acceptCall(incomingCall.fromUserId, user.id);
+  const handleDeclineCall = async () => {
+    try {
+      await dispatch(declineCall(participant.id)).unwrap();
+      socketService.endCall(participant.id)
+    } catch (error) {
+      console.error('Failed to accept call:', error);
+    }
   };
 
-  // কল reject
-  const handleReject = () => {
-    dispatch(rejectCall());
-    socketService.rejectCall(incomingCall.fromUserId, user.id );
+  const handleEndCall = async () => {
+    socketService.endCall(participant.id)
+    try {
+      await dispatch(endCall(participant.id)).unwrap();
+      socketService.endCall(participant.id)
+    } catch (error) {
+      console.error('Failed to accept call:', error);
+    }
   };
+
+  const startCallTimer = () => {
+    callTimerRef.current = setInterval(() => {
+      dispatch(incrementCallDuration());
+    }, 1000);
+  };
+
+  const stopCallTimer = () => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+  };
+
+  const handleToggleMute = () => {
+    console.log('handleToggleMute')
+    dispatch(toggleMute());
+  };
+
+  const handleToggleVideo = () => {
+    console.log('handleToggleVideo')
+    dispatch(toggleVideo());
+  };
+
+  const handleToggleSpeaker = () => {
+    console.log('handleToggleSpeaker')
+    dispatch(toggleSpeaker());
+  };
+
+  const handleToggleMinimize = () => {
+    console.log('handleToggleMinimize')
+    dispatch(toggleMinimize());
+  };
+
+  // Cleanup call timer on unmount
+  useEffect(() => {
+    return () => {
+      stopCallTimer();
+    };
+  }, []);
 
   const handleVoiceRecordStart = () => {
     setShowVoiceRecorder(true);
@@ -485,10 +588,7 @@ const MessageArea = () => {
           {/* Header */}
           <div className="bg-green-600 text-white p-4 border-b flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <button
-                  onClick={handleBackToContacts}
-                  className="lg:hidden p-2 text-white hover:bg-green-700 rounded-full transition-colors"
-              >
+              <button onClick={handleBackToContacts} className="lg:hidden p-2 text-white hover:bg-green-700 rounded-full transition-colors" >
                 <ArrowLeft className="w-5 h-5" />
               </button>
 
@@ -529,13 +629,13 @@ const MessageArea = () => {
               {currentChat.type !== 'group' && (
                   <>
                     <button
-                        onClick={() => initiateCall('voice')}
+                        onClick={() => handleInitiateCall('voice')}
                         className="p-2 text-white hover:bg-green-700 rounded-full transition-colors"
                     >
                       <Phone className="w-5 h-5" />
                     </button>
                     <button
-                        onClick={() => initiateCall('video')}
+                        onClick={() => handleInitiateCall('video')}
                         className="p-2 text-white hover:bg-green-700 rounded-full transition-colors"
                     >
                       <Video className="w-5 h-5" />
@@ -771,22 +871,27 @@ const MessageArea = () => {
         </div>
 
         {/* Call Modal */}
-        { isInitiateCall && (
-            <CallModal
-                contact={participant}
-                callType={initiateCallType}
-                onClose={initiateCallModal}
-            />
-        )}
-
-        { incomingCall && (
-            <IncomingCallModal
-                caller={ participant }
-                callType={ incomingCall.callType }
-                handleAccept={ handleAccept }
-                handleReject={ handleReject }
-            />
-        )}
+        <CallModal
+            isOpen={isCallModalOpen}
+            activeCall={activeCall}
+            callType={callType}
+            participant={participant}
+            callStatus={callStatus}
+            duration={callDuration}
+            onAccept={handleAcceptCall}
+            onDecline={handleDeclineCall}
+            onClose={handleEndCall}
+            onToggleMute={handleToggleMute}
+            onToggleVideo={handleToggleVideo}
+            onToggleSpeaker={handleToggleSpeaker}
+            onToggleMinimize={handleToggleMinimize}
+            isMuted={isMuted}
+            isVideoEnabled={isVideoEnabled}
+            isSpeakerOn={isSpeakerOn}
+            isMinimized={isMinimized}
+            cameraError={cameraError}
+            isCameraLoading={isCameraLoading}
+        />
       </>
   );
 };

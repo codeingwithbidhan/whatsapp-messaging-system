@@ -10,7 +10,6 @@ export const store = configureStore({
     auth: authSlice,
     chat: chatSlice,
     call: callSlice,
-    socket: socketSlice,
     ui: uiSlice,
   },
   middleware: (getDefaultMiddleware) =>

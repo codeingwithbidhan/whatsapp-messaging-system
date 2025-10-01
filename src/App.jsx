@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
-import {BrowserRouter as Router, Navigate, Route, Routes} from "react-router-dom";
-// import { initSocket, disconnectSocket } from "./socket/socket.js";
+import {BrowserRouter, Navigate, Route, Routes} from "react-router-dom";
 import {Provider, useDispatch, useSelector} from "react-redux";
 import { Toaster } from "react-hot-toast";
 import { store } from "./store/store";
@@ -18,7 +17,7 @@ function AppRoutes() {
         if (storedToken) {
             try {
                 const response = await authAPI.getMe(storedToken);
-                dispatch(setUser(response.data)); // নিশ্চিত হও যে backend থেকে user object আসছে
+                dispatch(setUser(response.data)); // backend থেকে user object আসছে কিনা নিশ্চিত হও
             } catch (error) {
                 console.error('Failed to initialize auth:', error);
                 dispatch(clearAuth());
@@ -74,9 +73,14 @@ function AppRoutes() {
 function App() {
     return (
         <Provider store={store}>
-            <Router>
+            <BrowserRouter
+                future={{
+                    v7_startTransition: true,
+                    v7_relativeSplatPath: true,
+                }}
+            >
                 <AppRoutes />
-            </Router>
+            </BrowserRouter>
         </Provider>
     );
 }

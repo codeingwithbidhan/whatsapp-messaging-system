@@ -224,7 +224,7 @@ const Sidebar = () => {
                     
                     {chat.typing && chat.typing.length > 0 && (
                       <p className="text-xs text-green-600 mt-1 font-medium">
-                        { chat.typing.length === 1 && chat.typing.length !== 0 ? chat.name + ' is typing...' : `${chat.typing.length} people typing...`}
+                        { chat.typing.length === 1 && chat.typing.length !== 0 && chat.type === 'private' ? chat.name + ' is typing...' : `${chat.typing.length} people typing...`}
                       </p>
                     )}
                   </div>
