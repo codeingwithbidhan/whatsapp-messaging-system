@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {  ArrowLeft,  Phone,  Video,  MoreVertical,  Send,  Paperclip,  Mic,  Smile,  Image,  X,  Play } from 'lucide-react';
 import { fetchMessages, sendMessage } from '../../store/slices/chatSlice';
-// import { setInitiateCall, acceptCall, rejectCall } from "../../store/slices/callSlice.js";
 import {
   initiateCall,
   acceptCall,

@@ -2,7 +2,6 @@
 import { io } from "socket.io-client";
 import store from '../store/store';
 import { setOnlineUsers, addMessage, updateMessageStatus, setTyping } from '../store/slices/chatSlice';
-// import { setIncomingCall, setInitiateCall, setIsConnected } from '../store/slices/callSlice.js'
 import { toast } from 'react-hot-toast';
 import {
     receiveIncomingCall,
@@ -20,7 +19,8 @@ import {
 } from '../store/slices/callSlice';
 
 // Node.js server এর URL
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
+// const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
 class SocketService {
     constructor() {
@@ -45,7 +45,6 @@ class SocketService {
         });
 
         this.socket.on('connect', () => {
-            // Add user to online list
             this.socket.emit('addUser', userId);
         });
 
@@ -56,7 +55,6 @@ class SocketService {
 
         // Listen new message
         this.socket.on('private_message', (msg) => {
-            console.log('front => private_message', msg)
             store.dispatch(addMessage(msg));
         });
 
@@ -67,7 +65,6 @@ class SocketService {
 
         // Typing
         this.socket.on('typing', ({ chatId, senderId, typing }) => {
-            console.log('bidhan typing', chatId, senderId, typing)
             store.dispatch(setTyping({ chatId, senderId, typing }));
         });
 
@@ -136,18 +133,6 @@ class SocketService {
             this.socket = null;
         }
     }
-
-    // joinChat(chatId) {
-    //     console.log('user join this chat room', chatId)
-    //     this.socket?.emit('joinChat', chatId);
-    //     console.log(`Socket ${this.socket.id} joined room: ${chatId}`);
-    // }
-    //
-    // leaveChat(chatId) {
-    //     console.log('user leave from this chat room', chatId)
-    //     this.socket?.emit('leaveChat', chatId);
-    //     console.log(`Socket ${this.socket.id} joined room: ${chatId}`);
-    // }
 
     sendMessage(chatId, message) {
         this.socket?.emit('sendMessage', { chatId, message });

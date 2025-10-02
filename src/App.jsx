@@ -1,14 +1,13 @@
 import React, { useEffect } from "react";
 import {BrowserRouter, Navigate, Route, Routes} from "react-router-dom";
 import {Provider, useDispatch, useSelector} from "react-redux";
-import { Toaster } from "react-hot-toast";
 import { store } from "./store/store";
 import Auth from "./components/Auth/Auth.jsx";
 import Chat from "./components/Chat/Chat";
-import { useAuth } from "./hooks/useAuth";
 import socketService from "./socket/socket.js";
 import * as authAPI from "./api/auth.js";
-import {clearAuth, setUser} from "./store/slices/authSlice.js";
+import { clearAuth, setUser } from "./store/slices/authSlice.js";
+
 function AppRoutes() {
     const dispatch = useDispatch();
     const { user, isAuthenticated, loading } = useSelector((state) => state.auth);

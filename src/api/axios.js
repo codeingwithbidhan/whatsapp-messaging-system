@@ -2,7 +2,8 @@ import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
 // Base URL from environment variable
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
+// const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 // Axios instance
 const api = axios.create({
