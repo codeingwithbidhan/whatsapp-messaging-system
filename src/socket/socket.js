@@ -35,7 +35,7 @@ class SocketService {
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             {
-                urls: 'turn:ws.chatbd.live:3478',
+                urls: 'turn:ws.chatbd.live:3478?transport=tcp',
                 username: 'testuser',
                 credential: 'testpass'
             }
@@ -249,23 +249,15 @@ class SocketService {
     async handleOffer(callerId, offer, isVideoCall = true) {
         try {
             await this.initLocalStream(isVideoCall);
-
             this._setupPeerConnection(false, callerId); // নতুন হেল্পার মেথড ব্যবহার
-
-            // 💡 নতুন সংযোজন: রিসিভার যখন Accept করে, তখন স্ট্যাটাস connecting এ সেট করুন
-            store.dispatch(setCallStatus('connecting'));
-
             await this.peerConnection.setRemoteDescription(offer);
-
             const answer = await this.peerConnection.createAnswer();
             await this.peerConnection.setLocalDescription(answer);
-
             this.socket.emit('webrtcAnswer', {
                 callerId: callerId,
                 answer,
             });
-
-            // store.dispatch(setCallStatus('connected'));
+            store.dispatch(setCallStatus('connecting'));
         } catch (error) {
             console.error('Failed to handle offer:', error);
             // store.dispatch(setCallError('Failed to connect call.'));
