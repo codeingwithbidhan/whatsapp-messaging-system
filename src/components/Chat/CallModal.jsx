@@ -43,9 +43,18 @@ const CallModal = ({
         if (!isOpen || callType !== 'video' || !localStream ) return;
 
         if (localVideoRef.current && localStream) {
+            if (localVideoRef.current.srcObject === localStream) {
+                console.log("Local stream already attached.");
+                return;
+            }
+            console.log("Attaching Local Stream to video element.");
             localVideoRef.current.srcObject = localStream;
             setHasLocalStreamAttached(true);
-            // Handle track status based on Redux/Prop (isVideoEnabled)
+            // প্লে রিকোয়েস্ট করতে পারেন, যদিও 'muted' এর কারণে এটি প্রয়োজন হয় না
+            localVideoRef.current.play().catch(e => {
+                console.error("Local video play failed:", e);
+            });
+
             localStream.getVideoTracks().forEach(track => {
                 track.enabled = isVideoEnabled;
             });
