@@ -43,7 +43,7 @@ const CallModal = ({
     useEffect(() => {
         // 💡 এখন শুধু localStream এর উপর নির্ভর করুন, এবং ref তৈরি হলেই অ্যাটাচ করুন
         if (localVideoRef.current && localStream) {
-
+            console.log('localVideoRef.current && localStream', localVideoRef.current && localStream)
             if (localVideoRef.current.srcObject === localStream) {
                 // console.log("Local stream already attached.");
                 return;
@@ -57,6 +57,7 @@ const CallModal = ({
             });
 
         } else if (!localStream) {
+            console.log('!localStream else if block', localStream)
             // Cleanup
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = null;
