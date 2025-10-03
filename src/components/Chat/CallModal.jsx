@@ -78,7 +78,7 @@ const CallModal = ({
                 remoteVideoRef.current.srcObject = null;
             }
         };
-    }, [isOpen, callType, callStatus, isRemoteStreamReady ]);
+    }, [isOpen, callType, isRemoteStreamReady ]);
 
     // Format call duration
     const formatDuration = (seconds) => {
