@@ -40,6 +40,7 @@ const CallModal = ({
     // --- Media Stream Attachment Logic ---
     // NEW: Attach local stream from socketService
     useEffect(() => {
+        console.log('local stram ar data call modal asche => ', localStream)
         if (!isOpen || callType !== 'video' || !localStream ) return;
 
         if (localVideoRef.current && localStream) {
