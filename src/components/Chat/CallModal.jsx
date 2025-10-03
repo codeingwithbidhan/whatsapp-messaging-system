@@ -40,26 +40,21 @@ const CallModal = ({
     // 1. Local Stream অ্যাটাচমেন্টের জন্য লজিক || এখন শুধুমাত্র localStream আপডেট হলে এই কোডটি রান করবে।
     // CallModal.js - useEffect #1 (সংশোধিত)
     useEffect(() => {
-
         if (!isOpen || !localStream) {
             if (!localStream && localVideoRef.current) {
                 localVideoRef.current.srcObject = null; // Cleanup
             }
             return;
         }
-
         if (localVideoRef.current && localStream) {
             if (localVideoRef.current.srcObject === localStream) {
                 return;
             }
-
             console.log("Attaching Local Stream to video element. (FINAL SUCCESS)");
-
             localVideoRef.current.srcObject = localStream;
             localVideoRef.current.play().catch(e => {
                 console.error("Local video play failed:", e);
             });
-
         } else if (!localStream) {
             console.log('!localStream else if block', localStream)
             // Cleanup
@@ -75,7 +70,6 @@ const CallModal = ({
         // Cleanup এর জন্য return ফাংশন আগের মতো রাখুন।
     }, [isOpen, localStream]); // 💡 ডিপেন্ডেন্সিতে শুধু localStream রাখুন
 
-
     // 2. Local Track Enable/Disable লজিক (ভিডিও অন/অফ হ্যান্ডলিং)
     useEffect(() => {
         if (localStream) {
@@ -88,14 +82,11 @@ const CallModal = ({
         // এই হুকটি শুধুমাত্র isVideoEnabled বা localStream টগল হলে চলবে
     }, [isOpen, localStream, isVideoEnabled]);
 
-
     // NEW: Attach remote stream from socketService
     useEffect(() => {
         if (!isOpen || callType !== 'video' || !isRemoteStreamReady ) return;
-
         // Assumes socketService provides a getter or property for the remote stream
         const remoteStreamFromService = socketService.remoteStream;
-
         if (remoteVideoRef.current && remoteStreamFromService) {
             console.log('Attaching Remote Stream and attempting play...');
             remoteVideoRef.current.srcObject = remoteStreamFromService;
@@ -104,7 +95,6 @@ const CallModal = ({
                 console.error("Remote video play failed:", e);
             });
         }
-
         return () => {
             if (remoteVideoRef.current) {
                 remoteVideoRef.current.srcObject = null;
@@ -397,7 +387,7 @@ const CallModal = ({
                                 ref={remoteAudioRef}
                                 autoPlay
                                 playsInline
-                                className="hidden"
+                                style={{ position: 'absolute', top: '-9999px', opacity: 0 }}
                             />
                         )}
                     </div>
