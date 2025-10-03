@@ -41,7 +41,7 @@ class SocketService {
             }
         ],
         // 'all' মানে প্রথমে STUN/P2P চেষ্টা করবে, ব্যর্থ হলে TURN (relay) ব্যবহার করবে।
-        iceTransportPolicy: 'all',
+        iceTransportPolicy: 'relay',
     };
     connect(userId) {
         // Connect to backend Socket.IO server
