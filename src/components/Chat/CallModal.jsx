@@ -119,7 +119,7 @@ const CallModal = ({
             });
             remoteAudioRef.current.play()
                 .then(() => {
-                    console.error("Block hoy nai. kaj koreche");
+                    console.log("Block hoy nai. kaj koreche");
                     setIsAudioBlocked(false);
                 })
                 .catch(e => {
