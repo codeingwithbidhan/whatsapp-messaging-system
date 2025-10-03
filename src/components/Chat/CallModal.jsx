@@ -35,7 +35,7 @@ const CallModal = ({
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
     const remoteAudioRef = useRef(null);
-
+    const [isAudioBlocked, setIsAudioBlocked] = useState(false);
     // --- Media Stream Attachment Logic ---
     // 1. Local Stream অ্যাটাচমেন্টের জন্য লজিক || এখন শুধুমাত্র localStream আপডেট হলে এই কোডটি রান করবে।
     // CallModal.js - useEffect #1 (সংশোধিত)
@@ -104,18 +104,28 @@ const CallModal = ({
 
     // NEW: Attach remote stream for VOICE CALL
     useEffect(() => {
-        if (!isOpen || callType !== 'voice' || !isRemoteStreamReady ) return;
-        console.log('isOpen callType isRemoteStreamReady', isOpen, callType, isRemoteStreamReady)
-
+        if (!isOpen || callType !== 'voice' || !isRemoteStreamReady ) {
+            // কল বন্ধ হলে বা অবস্থা পরিবর্তন হলে রিসেট করুন
+            setIsAudioBlocked(false);
+            return;
+        }
         // socketService-এর remoteStream ব্যবহার করা হচ্ছে
         const remoteStreamFromService = socketService.remoteStream;
-        console.log('before if remoteAudioRef.current && remoteStreamFromService', remoteAudioRef.current,remoteStreamFromService )
         if (remoteAudioRef.current && remoteStreamFromService) {
             console.log('Attaching Remote Audio Stream and attempting play...');
             remoteAudioRef.current.srcObject = remoteStreamFromService;
             remoteAudioRef.current.play().catch(e => {
                 console.error("Remote audio play failed:", e);
             });
+            remoteAudioRef.current.play()
+                .then(() => {
+                    console.error("Block hoy nai. kaj koreche");
+                    setIsAudioBlocked(false);
+                })
+                .catch(e => {
+                    console.error("Remote audio play failed (Likely Autoplay Blocked):", e);
+                    setIsAudioBlocked(true);
+                });
         }
 
         return () => {
@@ -424,6 +434,22 @@ const CallModal = ({
                             ) : (
                                 // Active call controls
                                 <>
+                                    {isAudioBlocked && (
+                                        <div className="absolute top-0 left-0 right-0 bg-yellow-600/90 text-white p-2 text-center z-10">
+                                            <p className="text-sm font-medium">
+                                                <button
+                                                    onClick={() => {
+                                                        remoteAudioRef.current?.play(); // আবার প্লে করার চেষ্টা
+                                                        setIsAudioBlocked(false); // সফল হলে বাটনটি হাইড করুন
+                                                    }}
+                                                    className="ml-3 px-3 py-1 bg-yellow-800 hover:bg-yellow-900 rounded-full text-xs font-bold transition-colors"
+                                                >
+                                                    START AUDIO
+                                                </button>
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {/* Mute */}
                                     <button
                                         onClick={onToggleMute}
