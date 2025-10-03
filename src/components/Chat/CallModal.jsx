@@ -105,10 +105,11 @@ const CallModal = ({
     // NEW: Attach remote stream for VOICE CALL
     useEffect(() => {
         if (!isOpen || callType !== 'voice' || !isRemoteStreamReady ) return;
+        console.log('isOpen callType isRemoteStreamReady', isOpen, callType, isRemoteStreamReady)
 
         // socketService-এর remoteStream ব্যবহার করা হচ্ছে
         const remoteStreamFromService = socketService.remoteStream;
-
+        console.log(' before if remoteAudioRef.current && remoteStreamFromService', remoteAudioRef.current,remoteStreamFromService )
         if (remoteAudioRef.current && remoteStreamFromService) {
             console.log('Attaching Remote Audio Stream and attempting play...');
             remoteAudioRef.current.srcObject = remoteStreamFromService;
