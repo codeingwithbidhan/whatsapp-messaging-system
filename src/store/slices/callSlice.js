@@ -183,6 +183,7 @@ const callSlice = createSlice({
 
         // WebRTC stream management
         setLocalStream: (state, action) => {
+            console.log('local stream test form redux => ', action.payload)
             state.localStream = action.payload;
         },
 
