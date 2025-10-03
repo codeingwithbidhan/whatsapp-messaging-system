@@ -34,6 +34,11 @@ class SocketService {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
+            {
+                urls: 'turn:ws.chatbd.live:3478',
+                username: 'testuser',
+                credential: 'testpass'
+            }
         ],
         // এই লাইনটি কঠোর NAT পরিস্থিতিতে সংযোগের গতি বাড়াতে সাহায্য করবে
         iceTransportPolicy: 'relay',
