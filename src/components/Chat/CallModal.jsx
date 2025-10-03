@@ -26,26 +26,27 @@ const CallModal = ({
                        isMinimized = false,
                        cameraError,
                        isCameraLoading:cameraLoading,
-                       isRemoteStreamReady = false
+                       isRemoteStreamReady = false,
+                       localStream
                    }) => {
     const dispatch = useDispatch();
     const [showControlsLocal, setShowControlsLocal] = useState(true);
     const [controlsTimeout, setControlsTimeout] = useState(null);
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
+    const remoteAudioRef = useRef(null);
     const [hasLocalStreamAttached, setHasLocalStreamAttached] = useState(false);
 
     // --- Media Stream Attachment Logic ---
     // NEW: Attach local stream from socketService
     useEffect(() => {
-        if (!isOpen || callType !== 'video') return;
-        const localStreamFromService = socketService.localStream; // Assumes socketService stores the stream
+        if (!isOpen || callType !== 'video' || !localStream ) return;
 
-        if (localVideoRef.current && localStreamFromService) {
-            localVideoRef.current.srcObject = localStreamFromService;
+        if (localVideoRef.current && localStream) {
+            localVideoRef.current.srcObject = localStream;
             setHasLocalStreamAttached(true);
             // Handle track status based on Redux/Prop (isVideoEnabled)
-            localStreamFromService.getVideoTracks().forEach(track => {
+            localStream.getVideoTracks().forEach(track => {
                 track.enabled = isVideoEnabled;
             });
         } else {
@@ -57,7 +58,7 @@ const CallModal = ({
                 localVideoRef.current.srcObject = null;
             }
         };
-    }, [isOpen, callType, isVideoEnabled, callStatus]);
+    }, [isOpen, callType, isVideoEnabled, localStream]);
 
 
     // NEW: Attach remote stream from socketService
@@ -79,6 +80,28 @@ const CallModal = ({
         return () => {
             if (remoteVideoRef.current) {
                 remoteVideoRef.current.srcObject = null;
+            }
+        };
+    }, [isOpen, callType, isRemoteStreamReady ]);
+
+    // NEW: Attach remote stream for VOICE CALL
+    useEffect(() => {
+        if (!isOpen || callType !== 'voice' || !isRemoteStreamReady ) return;
+
+        // socketService-এর remoteStream ব্যবহার করা হচ্ছে
+        const remoteStreamFromService = socketService.remoteStream;
+
+        if (remoteAudioRef.current && remoteStreamFromService) {
+            console.log('Attaching Remote Audio Stream and attempting play...');
+            remoteAudioRef.current.srcObject = remoteStreamFromService;
+            remoteAudioRef.current.play().catch(e => {
+                console.error("Remote audio play failed:", e);
+            });
+        }
+
+        return () => {
+            if (remoteAudioRef.current) {
+                remoteAudioRef.current.srcObject = null;
             }
         };
     }, [isOpen, callType, isRemoteStreamReady ]);
@@ -341,6 +364,14 @@ const CallModal = ({
                         >
                             <Minimize2 className="w-6 h-6" />
                         </button>
+                        {callType === 'voice' && callStatus === 'connected' && isRemoteStreamReady && (
+                            <audio
+                                ref={remoteAudioRef}
+                                autoPlay
+                                playsInline
+                                className="hidden"
+                            />
+                        )}
                     </div>
                 )}
 

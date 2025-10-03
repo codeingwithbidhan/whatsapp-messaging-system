@@ -15,7 +15,7 @@ import {
     setPeerConnection,
     setRemoteStream,
     setRemoteStreamReady,
-    resetCallState
+    resetCallState, setLocalStream
 } from '../store/slices/callSlice';
 
 // Node.js server এর URL
@@ -40,8 +40,8 @@ class SocketService {
                 credential: 'testpass'
             }
         ],
-        // এই লাইনটি কঠোর NAT পরিস্থিতিতে সংযোগের গতি বাড়াতে সাহায্য করবে
-        iceTransportPolicy: 'relay',
+        // 'all' মানে প্রথমে STUN/P2P চেষ্টা করবে, ব্যর্থ হলে TURN (relay) ব্যবহার করবে।
+        iceTransportPolicy: 'all',
     };
     connect(userId) {
         // Connect to backend Socket.IO server
@@ -167,6 +167,7 @@ class SocketService {
                     video,   // যদি ভিডিও কল হয় তাহলে true
                     audio: true, // সবসময় অডিও true
                 });
+                store.dispatch(setLocalStream(this.localStream));
             }
             return this.localStream;
         } catch (err) {
@@ -237,6 +238,9 @@ class SocketService {
 
             this._setupPeerConnection(false, callerId); // নতুন হেল্পার মেথড ব্যবহার
 
+            // 💡 নতুন সংযোজন: রিসিভার যখন Accept করে, তখন স্ট্যাটাস connecting এ সেট করুন
+            store.dispatch(setCallStatus('connecting'));
+
             await this.peerConnection.setRemoteDescription(offer);
 
             const answer = await this.peerConnection.createAnswer();
@@ -273,6 +277,8 @@ class SocketService {
             this.localStream.getTracks().forEach(track => track.stop());
             this.localStream = null;
         }
+        store.dispatch(setLocalStream(null));
+        store.dispatch(resetCallState());
         // UI এবং রিসিভারকে জানানোর জন্য
         this.socket?.emit('callEnded', toUserId);
         // store.dispatch(resetCallState());
