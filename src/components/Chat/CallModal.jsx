@@ -68,9 +68,12 @@ const CallModal = ({
         const remoteStreamFromService = socketService.remoteStream;
 
         if (remoteVideoRef.current && remoteStreamFromService) {
-            console.log('isRemoteStreamReady', isRemoteStreamReady)
+            console.log('Attaching Remote Stream and attempting play...');
             remoteVideoRef.current.srcObject = remoteStreamFromService;
-            remoteVideoRef.current.play().catch(e => console.error("Remote video play failed:", e));
+            remoteVideoRef.current.play().catch(e => {
+                // AbortError বা অন্যান্য Play Error এখানে ধরা পড়বে
+                console.error("Remote video play failed:", e);
+            });
         }
 
         return () => {
