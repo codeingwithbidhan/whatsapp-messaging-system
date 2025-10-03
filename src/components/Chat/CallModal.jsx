@@ -117,7 +117,7 @@ const CallModal = ({
             remoteAudioRef.current.play()
                 .then(() => {
                     console.log("Block hoy nai. kaj koreche");
-                    setIsAudioBlocked(false);
+                    setIsAudioBlocked(true);
                 })
                 .catch(e => {
                     console.error("Remote audio play failed (Likely Autoplay Blocked):", e);
