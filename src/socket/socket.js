@@ -102,12 +102,9 @@ class SocketService {
             // ২. Answer-টিকে রিমোট ডেসক্রিপশন হিসেবে সেট করা
             try {
                 await this.peerConnection.setRemoteDescription(data.answer);
-
                 // ৩. কল সফলভাবে সেটআপ হলে স্ট্যাটাস আপডেট করা
-                store.dispatch(setCallStatus('connected'));
-
-                console.log('WebRTC connection established!');
-
+                // store.dispatch(setCallStatus('connected'));
+                console.log('WebRTC connection established! Waiting for ICE candidates to complete.');
             } catch (error) {
                 console.error('Error setting remote description (Answer):', error);
                 // store.dispatch(setCallError('Failed to finalize call setup.'));
@@ -205,6 +202,23 @@ class SocketService {
                     callerId: isCaller ? store.getState().auth.user?.id : null,
                     candidate: event.candidate,
                 });
+            }
+        };
+
+        // 💡 নতুন সংযোজন: ICE সংযোগের অবস্থার পরিবর্তন পর্যবেক্ষণ
+        this.peerConnection.oniceconnectionstatechange = () => {
+            const currentState = this.peerConnection.iceConnectionState;
+            console.log('ICE Connection State Changed:', currentState);
+
+            // 'connected' বা 'completed' মানেই P2P সংযোগ তৈরি
+            if (currentState === 'connected' || currentState === 'completed') {
+                store.dispatch(setCallStatus('connected'));
+                console.log('ICE: Connection Successful. Call status set to connected.');
+
+            } else if (currentState === 'failed') {
+                // সংযোগ বিচ্ছিন্ন হলে বা ব্যর্থ হলে
+                console.error('ICE Connection Failed! Ending call.');
+                this.endCall(participantId);
             }
         };
     }
