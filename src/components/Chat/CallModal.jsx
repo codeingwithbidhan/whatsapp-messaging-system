@@ -70,6 +70,7 @@ const CallModal = ({
         if (remoteVideoRef.current && remoteStreamFromService) {
             console.log('isRemoteStreamReady', isRemoteStreamReady)
             remoteVideoRef.current.srcObject = remoteStreamFromService;
+            remoteVideoRef.current.play().catch(e => console.error("Remote video play failed:", e));
         }
 
         return () => {
@@ -173,27 +174,16 @@ const CallModal = ({
                     <div className="relative w-full h-full bg-gray-900">
                         {/* Remote Video */}
                         <div className="absolute inset-0">
-                            {callStatus === 'connected' ? (
-                                <div className="w-full h-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center">
-                                    <video
-                                        ref={remoteVideoRef}
-                                        className="w-full h-full object-cover"
-                                        autoPlay
-                                        playsInline
-                                    />
-                                    {/* Placeholder for demo */}
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <div className="text-center text-white">
-                                            <img
-                                                src={participant?.avatar || `https://ui-avatars.com/api/?name=${participant?.name}&background=6366f1&color=fff`}
-                                                alt={participant?.name}
-                                                className="w-32 h-32 rounded-full mx-auto mb-4 border-4 border-white shadow-lg"
-                                            />
-                                            <p className="text-lg font-medium">{participant?.name}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center">
+                                <video
+                                    ref={remoteVideoRef}
+                                    className="w-full h-full object-cover"
+                                    autoPlay
+                                    playsInline
+                                />
+                            </div>
+                            {/* Placeholder for demo */}
+                            {(callStatus !== 'connected' || !isRemoteStreamReady) && (
                                 <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
                                     <div className="text-center text-white">
                                         <img
