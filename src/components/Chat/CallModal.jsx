@@ -443,7 +443,7 @@ const CallModal = ({
                             ) : (
                                 // Active call controls
                                 <>
-                                    {callType === 'audio' && isAudioBlocked && (
+                                    {callType === 'voice' && isAudioBlocked && (
                                         <div className="absolute top-0 left-0 right-0 bg-yellow-600/90 text-white p-2 text-center z-10">
                                             <p className="text-sm font-medium">
                                                 <button onClick={handleStartAudio} className="ml-3 px-3 py-1 bg-yellow-800 hover:bg-yellow-900 rounded-full text-xs font-bold transition-colors"
