@@ -42,6 +42,7 @@ const CallModal = ({
     useEffect(() => {
         // 💡 এই শর্তটিই যথেষ্ট: localStream এবং ref তৈরি হয়েছে
         if (localVideoRef.current && localStream) {
+            console.log('localVideoRef.current && localStream', localVideoRef.current, localStream)
 
             if (localVideoRef.current.srcObject === localStream) {
                 console.log("Local stream already attached (Stable check).");
@@ -59,6 +60,7 @@ const CallModal = ({
             });
 
         } else if (!localStream) {
+            console.log('localStream else if part', localStream)
             // যদি localStream null হয়, তবে hasLocalStreamAttached স্টেট রিসেট করুন
             setHasLocalStreamAttached(false);
         }
@@ -75,6 +77,7 @@ const CallModal = ({
     // 2. Local Track Enable/Disable লজিক (ভিডিও অন/অফ হ্যান্ডলিং)
     useEffect(() => {
         if (localStream) {
+            console.log('localStream localStream =>', localStream)
             // ভিডিও টগল করার সময় শুধুমাত্র এই হুকটি চলবে
             localStream.getVideoTracks().forEach(track => {
                 track.enabled = isVideoEnabled;
