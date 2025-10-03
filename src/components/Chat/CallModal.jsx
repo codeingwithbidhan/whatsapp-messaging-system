@@ -38,39 +38,50 @@ const CallModal = ({
     const [hasLocalStreamAttached, setHasLocalStreamAttached] = useState(false);
 
     // --- Media Stream Attachment Logic ---
-    // NEW: Attach local stream from socketService
+    // 1. Local Stream অ্যাটাচমেন্টের জন্য লজিক || এখন শুধুমাত্র localStream আপডেট হলে এই কোডটি রান করবে।
     useEffect(() => {
-        if (!isOpen || callType !== 'video' || !localStream ) return;
-        console.log('before localVideoRef.current && localStream =>', localVideoRef.current, localStream)
-        console.log('before localVideoRef.current && localStream', localVideoRef.current && localStream)
+        // 💡 এই শর্তটিই যথেষ্ট: localStream এবং ref তৈরি হয়েছে
         if (localVideoRef.current && localStream) {
-            console.log('after localVideoRef.current && localStream =>', localVideoRef.current, localStream)
-            console.log('after localVideoRef.current && localStream', localVideoRef.current && localStream)
+
             if (localVideoRef.current.srcObject === localStream) {
-                console.log("Local stream already attached.");
+                console.log("Local stream already attached (Stable check).");
                 return;
             }
-            console.log("Attaching Local Stream to video element.");
+
+            console.log("Attaching Local Stream to video element. (SUCCESS)");
+
+            // 🚀 লোকাল স্ট্রিম অ্যাটাচ করুন
             localVideoRef.current.srcObject = localStream;
             setHasLocalStreamAttached(true);
-            // প্লে রিকোয়েস্ট করতে পারেন, যদিও 'muted' এর কারণে এটি প্রয়োজন হয় না
+
             localVideoRef.current.play().catch(e => {
                 console.error("Local video play failed:", e);
             });
 
-            localStream.getVideoTracks().forEach(track => {
-                track.enabled = isVideoEnabled;
-            });
-        } else {
+        } else if (!localStream) {
+            // যদি localStream null হয়, তবে hasLocalStreamAttached স্টেট রিসেট করুন
             setHasLocalStreamAttached(false);
         }
 
+        // Cleanup লজিক: যখন মডাল বন্ধ হবে বা স্ট্রিম চলে যাবে
         return () => {
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = null;
             }
         };
-    }, [isOpen, callType, isVideoEnabled, localStream]);
+    }, [isOpen, callType, localStream]);
+
+
+    // 2. Local Track Enable/Disable লজিক (ভিডিও অন/অফ হ্যান্ডলিং)
+    useEffect(() => {
+        if (localStream) {
+            // ভিডিও টগল করার সময় শুধুমাত্র এই হুকটি চলবে
+            localStream.getVideoTracks().forEach(track => {
+                track.enabled = isVideoEnabled;
+            });
+        }
+        // এই হুকটি শুধুমাত্র isVideoEnabled বা localStream টগল হলে চলবে
+    }, [localStream, isVideoEnabled]);
 
 
     // NEW: Attach remote stream from socketService
