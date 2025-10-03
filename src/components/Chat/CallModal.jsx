@@ -39,39 +39,32 @@ const CallModal = ({
 
     // --- Media Stream Attachment Logic ---
     // 1. Local Stream অ্যাটাচমেন্টের জন্য লজিক || এখন শুধুমাত্র localStream আপডেট হলে এই কোডটি রান করবে।
+    // CallModal.js - useEffect #1 (সংশোধিত)
     useEffect(() => {
-        // 💡 এই শর্তটিই যথেষ্ট: localStream এবং ref তৈরি হয়েছে
+        // 💡 এখন শুধু localStream এর উপর নির্ভর করুন, এবং ref তৈরি হলেই অ্যাটাচ করুন
         if (localVideoRef.current && localStream) {
-            console.log('localVideoRef.current && localStream', localVideoRef.current, localStream)
 
             if (localVideoRef.current.srcObject === localStream) {
-                console.log("Local stream already attached (Stable check).");
+                // console.log("Local stream already attached.");
                 return;
             }
 
-            console.log("Attaching Local Stream to video element. (SUCCESS)");
+            console.log("Attaching Local Stream to video element. (FINAL SUCCESS)");
 
-            // 🚀 লোকাল স্ট্রিম অ্যাটাচ করুন
             localVideoRef.current.srcObject = localStream;
-            setHasLocalStreamAttached(true);
-
             localVideoRef.current.play().catch(e => {
                 console.error("Local video play failed:", e);
             });
 
         } else if (!localStream) {
-            console.log('localStream else if part', localStream)
-            // যদি localStream null হয়, তবে hasLocalStreamAttached স্টেট রিসেট করুন
-            setHasLocalStreamAttached(false);
-        }
-
-        // Cleanup লজিক: যখন মডাল বন্ধ হবে বা স্ট্রিম চলে যাবে
-        return () => {
+            // Cleanup
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = null;
             }
-        };
-    }, [isOpen, callType, localStream]);
+        }
+
+        // Cleanup এর জন্য return ফাংশন আগের মতো রাখুন।
+    }, [localStream]); // 💡 ডিপেন্ডেন্সিতে শুধু localStream রাখুন
 
 
     // 2. Local Track Enable/Disable লজিক (ভিডিও অন/অফ হ্যান্ডলিং)
