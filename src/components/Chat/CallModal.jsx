@@ -205,6 +205,7 @@ const CallModal = ({
                                     ref={remoteVideoRef}
                                     className="w-full h-full object-cover"
                                     autoPlay
+                                    muted
                                     playsInline
                                 />
                             </div>
