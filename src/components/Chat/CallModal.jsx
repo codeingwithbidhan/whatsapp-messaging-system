@@ -114,9 +114,6 @@ const CallModal = ({
         if (remoteAudioRef.current && remoteStreamFromService) {
             console.log('Attaching Remote Audio Stream and attempting play...');
             remoteAudioRef.current.srcObject = remoteStreamFromService;
-            remoteAudioRef.current.play().catch(e => {
-                console.error("Remote audio play failed:", e);
-            });
             remoteAudioRef.current.play()
                 .then(() => {
                     console.log("Block hoy nai. kaj koreche");
@@ -171,6 +168,18 @@ const CallModal = ({
                 clearTimeout(controlsTimeout);
                 setControlsTimeout(null);
             }
+        }
+    };
+    const handleStartAudio = () => {
+        if (remoteAudioRef.current) {
+            remoteAudioRef.current.play().then(() => {
+                console.log("Audio playback successfully started by user interaction.");
+                // 🎉 সফল হলে স্টেট আপডেট করুন
+                setIsAudioBlocked(false);
+            }).catch(e => {
+                console.error("Manual audio start failed:", e);
+                // যদি ম্যানুয়াল স্টার্টও ফেল করে, তবে সম্ভবত অন্য হার্ডওয়্যার/কোডেক সমস্যা
+            });
         }
     };
 
@@ -434,15 +443,10 @@ const CallModal = ({
                             ) : (
                                 // Active call controls
                                 <>
-                                    {isAudioBlocked && (
+                                    {callType === 'audio' && isAudioBlocked && (
                                         <div className="absolute top-0 left-0 right-0 bg-yellow-600/90 text-white p-2 text-center z-10">
                                             <p className="text-sm font-medium">
-                                                <button
-                                                    onClick={() => {
-                                                        remoteAudioRef.current?.play(); // আবার প্লে করার চেষ্টা
-                                                        setIsAudioBlocked(false); // সফল হলে বাটনটি হাইড করুন
-                                                    }}
-                                                    className="ml-3 px-3 py-1 bg-yellow-800 hover:bg-yellow-900 rounded-full text-xs font-bold transition-colors"
+                                                <button onClick={handleStartAudio} className="ml-3 px-3 py-1 bg-yellow-800 hover:bg-yellow-900 rounded-full text-xs font-bold transition-colors"
                                                 >
                                                     START AUDIO
                                                 </button>
