@@ -35,6 +35,8 @@ class SocketService {
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
         ],
+        // এই লাইনটি কঠোর NAT পরিস্থিতিতে সংযোগের গতি বাড়াতে সাহায্য করবে
+        iceTransportPolicy: 'relay',
     };
     connect(userId) {
         // Connect to backend Socket.IO server

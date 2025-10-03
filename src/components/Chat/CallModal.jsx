@@ -68,6 +68,7 @@ const CallModal = ({
         const remoteStreamFromService = socketService.remoteStream;
 
         if (remoteVideoRef.current && remoteStreamFromService) {
+            console.log('isRemoteStreamReady', isRemoteStreamReady)
             remoteVideoRef.current.srcObject = remoteStreamFromService;
         }
 
