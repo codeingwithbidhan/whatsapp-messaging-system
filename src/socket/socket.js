@@ -179,16 +179,19 @@ class SocketService {
 
         // ontrack হ্যান্ডলার সেট করা
         this.peerConnection.ontrack = (event) => {
-            event.streams[0].getTracks().forEach((track) => {
-                this.remoteStream.addTrack(track);
-            });
-            // UI-কে জানানোর জন্য সিম্পল স্টেট আপডেট
+            if (event.streams && event.streams[0]) {
+                console.log('stream asche => ', event.streams[0])
+                // ১. socketService-এর remoteStream property আপডেট করুন
+                this.remoteStream = event.streams[0];
+            }
+            // ২. Redux-এ ডিসপ্যাচ করে UI-কে জানান যে রিমোট স্ট্রিম ব্যবহারের জন্য প্রস্তুত
             store.dispatch(setRemoteStreamReady(true));
         };
 
         // ICE candidate হ্যান্ডলার সেট করা
         this.peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
+                console.log('onicecandidate call hoyche => ', event.candidate)
                 this.socket.emit('iceCandidate', {
                     to: participantId,
                     callerId: isCaller ? store.getState().auth.user?.id : null,

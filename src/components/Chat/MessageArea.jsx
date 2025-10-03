@@ -60,7 +60,7 @@ const MessageArea = () => {
   const isParticipantOnline = participant ? onlineUsers.includes(participant.id) : false;
 
   const { activeCall,isCallModalOpen, callStatus, callType, callDuration, isMuted, isVideoEnabled, isSpeakerOn, isMinimized,
-    showControls, cameraError, isCameraLoading } = useSelector((state) => state.call);
+    showControls, cameraError, isCameraLoading, remoteStreamReady } = useSelector((state) => state.call);
 
   // Function to generate video thumbnail
   const generateVideoThumbnail = (videoFile, videoUrl) => {
@@ -890,6 +890,7 @@ const MessageArea = () => {
             isMinimized={isMinimized}
             cameraError={cameraError}
             isCameraLoading={isCameraLoading}
+            isRemoteStreamReady = {remoteStreamReady}
         />
       </>
   );

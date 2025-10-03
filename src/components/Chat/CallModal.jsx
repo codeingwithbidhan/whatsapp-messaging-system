@@ -25,7 +25,8 @@ const CallModal = ({
                        isSpeakerOn = false,
                        isMinimized = false,
                        cameraError,
-                       isCameraLoading:cameraLoading
+                       isCameraLoading:cameraLoading,
+                       isRemoteStreamReady = false
                    }) => {
     const dispatch = useDispatch();
     const [showControlsLocal, setShowControlsLocal] = useState(true);
@@ -61,7 +62,7 @@ const CallModal = ({
 
     // NEW: Attach remote stream from socketService
     useEffect(() => {
-        if (!isOpen || callType !== 'video') return;
+        if (!isOpen || callType !== 'video' || !isRemoteStreamReady ) return;
 
         // Assumes socketService provides a getter or property for the remote stream
         const remoteStreamFromService = socketService.remoteStream;
@@ -75,7 +76,7 @@ const CallModal = ({
                 remoteVideoRef.current.srcObject = null;
             }
         };
-    }, [isOpen, callType, callStatus]);
+    }, [isOpen, callType, callStatus, isRemoteStreamReady ]);
 
     // Format call duration
     const formatDuration = (seconds) => {
