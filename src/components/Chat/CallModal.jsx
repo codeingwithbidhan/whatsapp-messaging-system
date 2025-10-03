@@ -35,17 +35,21 @@ const CallModal = ({
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
     const remoteAudioRef = useRef(null);
-    const [hasLocalStreamAttached, setHasLocalStreamAttached] = useState(false);
 
     // --- Media Stream Attachment Logic ---
     // 1. Local Stream অ্যাটাচমেন্টের জন্য লজিক || এখন শুধুমাত্র localStream আপডেট হলে এই কোডটি রান করবে।
     // CallModal.js - useEffect #1 (সংশোধিত)
     useEffect(() => {
-        // 💡 এখন শুধু localStream এর উপর নির্ভর করুন, এবং ref তৈরি হলেই অ্যাটাচ করুন
+
+        if (!isOpen || !localStream) {
+            if (!localStream && localVideoRef.current) {
+                localVideoRef.current.srcObject = null; // Cleanup
+            }
+            return;
+        }
+
         if (localVideoRef.current && localStream) {
-            console.log('localVideoRef.current && localStream', localVideoRef.current && localStream)
             if (localVideoRef.current.srcObject === localStream) {
-                // console.log("Local stream already attached.");
                 return;
             }
 
@@ -63,9 +67,13 @@ const CallModal = ({
                 localVideoRef.current.srcObject = null;
             }
         }
-
+        return () => {
+            if (localVideoRef.current) {
+                localVideoRef.current.srcObject = null;
+            }
+        };
         // Cleanup এর জন্য return ফাংশন আগের মতো রাখুন।
-    }, [localStream]); // 💡 ডিপেন্ডেন্সিতে শুধু localStream রাখুন
+    }, [isOpen, localStream]); // 💡 ডিপেন্ডেন্সিতে শুধু localStream রাখুন
 
 
     // 2. Local Track Enable/Disable লজিক (ভিডিও অন/অফ হ্যান্ডলিং)
@@ -78,7 +86,7 @@ const CallModal = ({
             });
         }
         // এই হুকটি শুধুমাত্র isVideoEnabled বা localStream টগল হলে চলবে
-    }, [localStream, isVideoEnabled]);
+    }, [isOpen, localStream, isVideoEnabled]);
 
 
     // NEW: Attach remote stream from socketService
@@ -273,7 +281,7 @@ const CallModal = ({
                                             <p className="text-xs">Camera unavailable</p>
                                         </div>
                                     </div>
-                                ) : hasLocalStreamAttached ? (
+                                ) : localStream ? (
                                     <video
                                         ref={localVideoRef}
                                         className="w-full h-full object-cover transform scale-x-[-1]"
