@@ -41,7 +41,10 @@ const CallModal = ({
     // NEW: Attach local stream from socketService
     useEffect(() => {
         console.log('local stram ar data call modal asche => ', localStream)
+        console.log('before isOpen, calltype',isOpen, callType)
         if (!isOpen || callType !== 'video' || !localStream ) return;
+        console.log('after isOpen, calltype',isOpen, callType)
+        console.log('before local stram ar data call modal asche => ', localStream)
 
         if (localVideoRef.current && localStream) {
             if (localVideoRef.current.srcObject === localStream) {
