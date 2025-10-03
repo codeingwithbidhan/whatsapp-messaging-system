@@ -262,6 +262,7 @@ class SocketService {
     async handleIceCandidate(candidate) {
         try {
             if (this.peerConnection && candidate) {
+                console.log('this.peerConnection && candidate =>', this.peerConnection && candidate)
                 await this.peerConnection.addIceCandidate(candidate);
             }
         } catch (error) {
