@@ -278,7 +278,7 @@ class SocketService {
     async handleOffer(callerId, offer, isVideoCall = true) {
         try {
             await this.initLocalStream(isVideoCall);
-            this._setupPeerConnection(false, callerId); // নতুন হেল্পার মেথড ব্যবহার
+            await this._setupPeerConnection(false, callerId); // নতুন হেল্পার মেথড ব্যবহার
             await this.peerConnection.setRemoteDescription(offer);
             const answer = await this.peerConnection.createAnswer();
             await this.peerConnection.setLocalDescription(answer);
