@@ -51,7 +51,7 @@ const MessageArea = () => {
   const inputRef = useRef(null);
   const paperclipButtonRef = useRef(null);
   const callTimerRef = useRef(null);
-
+  const callModalRef = useRef(null);
   const currentChat = chats.find(chat => chat.chatId === activeChat);
   const chatMessages = messages[activeChat] || [];
   const participant = currentChat?.type !== 'group'
@@ -468,8 +468,9 @@ const MessageArea = () => {
         await dispatch(acceptCall(callerId)).unwrap();
         await socketService.handleOffer(activeCall.callerId, activeCall.offer, activeCall.callType === 'video');
         // startCallTimer();
-        // কলারকে কল গৃহীত হওয়ার বার্তা দিন (যদি প্রয়োজন হয়)
-        // this.socket.emit('callAccepted', { toUserId: callerId });
+        if (callModalRef.current) {
+          callModalRef.current.playRemoteStream(); // CallModal-এ সংজ্ঞায়িত মেথড
+        }
       } catch (error) {
         console.error('Failed to accept call:', error);
       }
@@ -871,6 +872,7 @@ const MessageArea = () => {
 
         {/* Call Modal */}
         <CallModal
+            ref={callModalRef}
             isOpen={isCallModalOpen}
             activeCall={activeCall}
             callType={callType}

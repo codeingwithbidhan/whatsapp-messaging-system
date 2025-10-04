@@ -256,6 +256,7 @@ class SocketService {
         try {
             store.dispatch(setCallStatus('calling')); // কল স্ট্যাটাস আপডেট হলো
             const videoEnabled = callType === 'video';
+            console.log('videoEnabled', videoEnabled)
             await this.initLocalStream(videoEnabled);
             await this._setupPeerConnection(true, receiverId);
 

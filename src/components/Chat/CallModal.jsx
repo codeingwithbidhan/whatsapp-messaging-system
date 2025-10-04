@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { forwardRef,useImperativeHandle, useState, useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import { setCameraLoading, setCameraError, setShowControls } from '../../store/slices/callSlice';
 import {Phone,PhoneOff,Video,VideoOff,Mic,MicOff,Volume2,VolumeX,Minimize2,Maximize2,Settings,Users,MessageCircle
@@ -6,7 +6,7 @@ import {Phone,PhoneOff,Video,VideoOff,Mic,MicOff,Volume2,VolumeX,Minimize2,Maxim
 import store from "../../store/store.js";
 import { socketService } from '../../socket/socket.js';
 
-const CallModal = ({
+const CallModal = forwardRef(({
                        isOpen,
                        activeCall,
                        callType = 'voice', // 'voice' or 'video'
@@ -28,14 +28,17 @@ const CallModal = ({
                        isCameraLoading:cameraLoading,
                        isRemoteStreamReady = false,
                        localStream
-                   }) => {
+                   }, ref) => {
     const dispatch = useDispatch();
     const [showControlsLocal, setShowControlsLocal] = useState(true);
     const [controlsTimeout, setControlsTimeout] = useState(null);
+
+    // userRef:
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
     const remoteAudioRef = useRef(null);
     const [isAudioBlocked, setIsAudioBlocked] = useState(false);
+
     // --- Media Stream Attachment Logic ---
     // 1. Local Stream অ্যাটাচমেন্টের জন্য লজিক || এখন শুধুমাত্র localStream আপডেট হলে এই কোডটি রান করবে।
     // CallModal.js - useEffect #1 (সংশোধিত)
@@ -102,6 +105,24 @@ const CallModal = ({
         };
     }, [isOpen, callType, isRemoteStreamReady ]);
 
+    useImperativeHandle(ref, () => ({
+        playRemoteStream: () => {
+            const targetRef = callType === 'video' ? remoteVideoRef : remoteAudioRef;
+            if (targetRef.current) {
+                targetRef.current.play().then(() => {
+                    if (callType === 'voice') {
+                        setIsAudioBlocked(false);
+                    }
+                }).catch(error => {
+                    console.warn(`Manual play of ${callType} stream failed:`, error);
+                    if (callType === 'voice') {
+                        setIsAudioBlocked(true);
+                    }
+                });
+            }
+        },
+    }));
+
     // NEW: Attach remote stream for VOICE CALL
     useEffect(() => {
         if (!isOpen || callType !== 'voice' || !isRemoteStreamReady ) {
@@ -117,7 +138,7 @@ const CallModal = ({
             remoteAudioRef.current.play()
                 .then(() => {
                     console.log("Block hoy nai. kaj koreche");
-                    setIsAudioBlocked(true);
+                    setIsAudioBlocked(false);
                 })
                 .catch(e => {
                     console.error("Remote audio play failed (Likely Autoplay Blocked):", e);
@@ -131,6 +152,17 @@ const CallModal = ({
             }
         };
     }, [isOpen, callType, isRemoteStreamReady ]);
+
+    const handleStartAudio = () => {
+        if (remoteAudioRef.current) {
+            remoteAudioRef.current.play().then(() => {
+                console.log("Audio playback successfully started by user interaction.");
+                setIsAudioBlocked(false);
+            }).catch(e => {
+                console.error("Manual audio start failed:", e);
+            });
+        }
+    };
 
     // Format call duration
     const formatDuration = (seconds) => {
@@ -168,18 +200,6 @@ const CallModal = ({
                 clearTimeout(controlsTimeout);
                 setControlsTimeout(null);
             }
-        }
-    };
-    const handleStartAudio = () => {
-        if (remoteAudioRef.current) {
-            remoteAudioRef.current.play().then(() => {
-                console.log("Audio playback successfully started by user interaction.");
-                // 🎉 সফল হলে স্টেট আপডেট করুন
-                setIsAudioBlocked(false);
-            }).catch(e => {
-                console.error("Manual audio start failed:", e);
-                // যদি ম্যানুয়াল স্টার্টও ফেল করে, তবে সম্ভবত অন্য হার্ডওয়্যার/কোডেক সমস্যা
-            });
         }
     };
 
@@ -554,6 +574,6 @@ const CallModal = ({
             )}
         </div>
     );
-};
+});
 
 export default CallModal;
