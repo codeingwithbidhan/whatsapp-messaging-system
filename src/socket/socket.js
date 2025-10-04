@@ -208,6 +208,8 @@ class SocketService {
 
         // লোকাল ট্র্যাক যোগ করা
         this.localStream.getTracks().forEach((track) => {
+            console.log('track =>', track)
+            console.log('track =>', this.localStream)
             this.peerConnection.addTrack(track, this.localStream);
         });
 
