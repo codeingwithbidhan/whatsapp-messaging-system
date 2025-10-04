@@ -468,9 +468,14 @@ const MessageArea = () => {
         await dispatch(acceptCall(callerId)).unwrap();
         await socketService.handleOffer(activeCall.callerId, activeCall.offer, activeCall.callType === 'video');
         // startCallTimer();
-        if (callModalRef.current) {
-          callModalRef.current.playRemoteStream(); // CallModal-এ সংজ্ঞায়িত মেথড
-        }
+        setTimeout(() => {
+          if (callModalRef.current) {
+            console.log('Attempting manual play via ref...');
+            callModalRef.current.playRemoteStream();
+          } else {
+            console.error('CallModal Ref is null on accept!');
+          }
+        }, 50); // 50ms অপেক্ষা করুন DOM আপডেট হওয়ার জন্য
       } catch (error) {
         console.error('Failed to accept call:', error);
       }
