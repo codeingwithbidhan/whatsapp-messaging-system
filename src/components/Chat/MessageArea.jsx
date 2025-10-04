@@ -187,7 +187,6 @@ const MessageArea = () => {
   useEffect(() => {
     // 1. যখন callStatus 'connected' হবে, তখন টাইমার শুরু করুন।
     if (callStatus === 'connected') {
-      console.log('video call connected')
       startCallTimer();
     }
     // 2. যখন callStatus 'ended' বা 'declined' হবে, তখন টাইমার বন্ধ করুন।
