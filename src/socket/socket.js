@@ -208,8 +208,11 @@ class SocketService {
 
         // লোকাল ট্র্যাক যোগ করা
         this.localStream.getTracks().forEach((track) => {
-            console.log('track =>', track)
-            console.log('track =>', this.localStream)
+            if (!track.enabled) {
+                track.enabled = true;
+                console.warn("Local audio track was disabled, enabling now.");
+            }
+            console.log('local track asche =>', track)
             this.peerConnection.addTrack(track, this.localStream);
         });
 

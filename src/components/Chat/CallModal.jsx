@@ -134,30 +134,19 @@ const CallModal = forwardRef(({
         // socketService-এর remoteStream ব্যবহার করা হচ্ছে
         const remoteStreamFromService = socketService.remoteStream;
         if (remoteAudioRef.current && remoteStreamFromService) {
-
-            // **********************************************
-            // ✅ নতুন Debugging চেক: অডিও ট্র্যাক আছে কিনা
-            const audioTracks = remoteStreamFromService.getAudioTracks();
-            console.log(`DEBUG: Remote Stream has ${audioTracks.length} Audio Tracks.`);
-            if (audioTracks.length === 0) {
-                console.error("CRITICAL: No audio tracks found in remote stream. Check sender's media constraints.");
-                // UI-তে কিছু একটা দেখান যে অডিও ট্র্যাক নেই
-            } else {
-                audioTracks.forEach((track, index) => {
-                    console.log(`Audio Track ${index}: Enabled=${track.enabled}, ReadyState=${track.readyState}`);
-                });
-            }
-            // **********************************************
-
-
             console.log('Attaching Remote Audio Stream and attempting play...');
             remoteAudioRef.current.srcObject = remoteStreamFromService;
+
             remoteAudioRef.current.play()
                 .then(() => {
                     console.log("Block hoy nai. kaj koreche");
                     setIsAudioBlocked(false);
                 })
                 .catch(e => {
+                    if (e.name === 'AbortError') {
+                        console.log("Play attempt aborted safely during cleanup/unmount.");
+                        return;
+                    }
                     console.error("Remote audio play failed (Likely Autoplay Blocked):", e);
                     setIsAudioBlocked(true);
                 });
