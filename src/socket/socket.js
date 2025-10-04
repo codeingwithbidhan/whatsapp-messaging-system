@@ -50,7 +50,7 @@ class SocketService {
             console.log('response comes from Xirsys', iceServersArray)
 
             return {
-                iceServers: iceServersArray,
+                iceServers: [iceServersArray],
                 iceCandidatePoolSize: 0,
             };
 
