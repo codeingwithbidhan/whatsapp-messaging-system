@@ -17,9 +17,10 @@ import {
     setRemoteStreamReady,
     resetCallState, setLocalStream
 } from '../store/slices/callSlice';
+import { getTurnCredentials } from '../api/auth';
 
 // Node.js server এর URL
-// const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
+const BASE_API_URL = import.meta.env.VITE_API_BASE || "https://chatbd.live/api";
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
 class SocketService {
@@ -30,21 +31,46 @@ class SocketService {
         this.remoteStream = null;
     }
     // STUN সার্ভার কনফিগারেশন (NAT traversal এর জন্য দরকার হয়)
-    config = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            {
-                urls: 'turn:ws.chatbd.live:3478?transport=tcp',
-                username: 'testuser',
-                credential: 'testpass'
-            }
-        ],
-        // 💡 চূড়ান্ত ফিক্স: শুধুমাত্র TURN সার্ভার ব্যবহার করে সংযোগ স্থির করুন
-        // iceTransportPolicy: 'relay',
-        // 💡 অতিরিক্ত ফিক্স: ICE ক্যান্ডিডেট পুলিং নিষ্ক্রিয় করে সংযোগ দ্রুত করুন
-        iceCandidatePoolSize: 0,
-    };
+    // config = {
+    //     iceServers: [
+    //         { urls: 'stun:stun.l.google.com:19302' },
+    //         { urls: 'stun:stun1.l.google.com:19302' },
+    //         {
+    //             urls: 'turn:ws.chatbd.live:3478?transport=tcp',
+    //             username: 'testuser',
+    //             credential: 'testpass'
+    //         }
+    //     ],
+    //     iceTransportPolicy: 'relay',
+    //     iceCandidatePoolSize: 0,
+    // };
+    async getIceServerConfig() {
+        try {
+            const iceServersArray = await getTurnCredentials();
+            console.log('response comes from Xirsys', iceServersArray)
+
+            return {
+                iceServers: iceServersArray,
+                iceCandidatePoolSize: 0,
+            };
+
+        } catch (error) {
+            console.error("Error fetching TURN credentials from Laravel backend:", error);
+            return {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    {
+                        urls: 'turn:ws.chatbd.live:3478?transport=tcp',
+                        username: 'testuser',
+                        credential: 'testpass'
+                    }
+                ],
+                iceTransportPolicy: 'all',
+                iceCandidatePoolSize: 0,
+            };
+        }
+    }
     connect(userId) {
         // Connect to backend Socket.IO server
         this.socket = io(SOCKET_URL, {
@@ -175,8 +201,9 @@ class SocketService {
     }
 
     // ডুপ্লিকেশন এড়াতে সাধারণ WebRTC সেটআপ লজিক
-    _setupPeerConnection(isCaller, participantId) {
-        this.peerConnection = new RTCPeerConnection(this.config);
+    async _setupPeerConnection(isCaller, participantId) {
+        const dynamicConfig = await this.getIceServerConfig();
+        this.peerConnection = new RTCPeerConnection(dynamicConfig);
         this.remoteStream = new MediaStream();
 
         // লোকাল ট্র্যাক যোগ করা

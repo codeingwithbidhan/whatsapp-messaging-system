@@ -5,3 +5,7 @@ export const getMe = () => api.get('/me');
 export const register = (data) => api.post('/register', data);
 export const logout = () => api.post('/logout');
 export const refreshToken = () => api.post('/refresh-token');
+export const getTurnCredentials = async () => {
+    const response = await api.get('/turn-credentials');
+    return response.data;
+};
