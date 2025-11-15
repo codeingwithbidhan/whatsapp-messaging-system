@@ -30,20 +30,7 @@ class SocketService {
         this.localStream = null;
         this.remoteStream = null;
     }
-    // STUN সার্ভার কনফিগারেশন (NAT traversal এর জন্য দরকার হয়)
-    // config = {
-    //     iceServers: [
-    //         { urls: 'stun:stun.l.google.com:19302' },
-    //         { urls: 'stun:stun1.l.google.com:19302' },
-    //         {
-    //             urls: 'turn:ws.chatbd.live:3478?transport=tcp',
-    //             username: 'testuser',
-    //             credential: 'testpass'
-    //         }
-    //     ],
-    //     iceTransportPolicy: 'relay',
-    //     iceCandidatePoolSize: 0,
-    // };
+
     async getIceServerConfig() {
         try {
             const iceServersArray = await getTurnCredentials();

@@ -6,8 +6,6 @@ import {
   Settings, 
   LogOut, 
   Users,
-  Phone,
-  Video,
   MoreVertical 
 } from 'lucide-react';
 import { setActiveChat, fetchChats, createChat } from '../../store/slices/chatSlice';
@@ -16,6 +14,8 @@ import { setSidebarOpen } from '../../store/slices/uiSlice';
 import { formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
 import socketService from "../../socket/socket.js";
+import NewChatModal from './NewChatModal.jsx';
+import NewGroupModal from './NewGroupModal.jsx';
 
 const Sidebar = () => {
   const dispatch = useDispatch();
@@ -23,7 +23,9 @@ const Sidebar = () => {
   const { chats, activeChat, onlineUsers } = useSelector((state) => state.chat);
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
-
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [showNewGroupModal, setShowNewGroupModal] = useState(false);
+  
   const filteredChats = chats.filter(chat =>
     chat.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     chat.participants?.some(p => 
@@ -43,9 +45,9 @@ const Sidebar = () => {
   const handleLogout = async (e) => {
     e.preventDefault();
     try {
-        await dispatch(logoutUser()).unwrap();
-        socketService.disconnect()
-        toast.success('Logged out successfully');
+      await dispatch(logoutUser()).unwrap();
+      socketService.disconnect()
+      toast.success('Logged out successfully');
     } catch (error) {
       toast.error('Logout failed');
     }
@@ -147,11 +149,15 @@ const Sidebar = () => {
       {/* Action Buttons - Hidden on mobile for cleaner look */}
       <div className="hidden lg:block p-4 border-b bg-gray-50">
         <div className="flex space-x-2">
-          <button className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          {/* UPDATED BUTTON */}
+          <button 
+            onClick={() => setShowNewChatModal(true)} // Toggles the modal open
+            className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
             <MessageCircle className="w-4 h-4 inline mr-2" />
             New Chat
           </button>
-          <button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          <button onClick={() => setShowNewGroupModal(true)} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <Users className="w-4 h-4 inline mr-2" />
             New Group
           </button>
@@ -175,7 +181,7 @@ const Sidebar = () => {
               <div
                 key={chat.chatId}
                 onClick={() => handleChatSelect(chat.chatId)}
-                className={`p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition-colors active:bg-gray-100 ${
+                className={`p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition-all duration-1000 ease-in-out active:bg-gray-100 ${
                   activeChat === chat.chatId ? 'bg-green-50 border-green-200' : ''
                 }`}
               >
@@ -238,16 +244,28 @@ const Sidebar = () => {
       {/* Mobile Action Buttons at Bottom */}
       <div className="lg:hidden p-4 border-t bg-gray-50">
         <div className="flex space-x-2">
-          <button className="flex-1 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+          {/* UPDATED BUTTON */}
+          <button 
+            onClick={() => setShowNewChatModal(true)} // Toggles the modal open
+            className="flex-1 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors"
+          >
             <MessageCircle className="w-4 h-4 inline mr-2" />
             New Chat
           </button>
-          <button className="flex-1 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+          <button onClick={() => setShowNewGroupModal(true)} className="flex-1 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
             <Users className="w-4 h-4 inline mr-2" />
             Group
           </button>
         </div>
       </div>
+
+      {/* New Chat Modal Integration */}
+      <NewChatModal 
+        show={showNewChatModal} 
+        onClose={() => setShowNewChatModal(false)} 
+      />
+
+      <NewGroupModal show={showNewGroupModal} onClose={() => setShowNewGroupModal(false)} />
     </div>
   );
 };
