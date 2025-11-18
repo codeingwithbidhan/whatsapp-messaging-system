@@ -65,8 +65,8 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
         return <Check className="w-2 h-2 text-gray-400" />;
       case 'delivered':
         return <CheckCheck className="w-2 h-2 text-gray-400" />;
-      case 'read':
-        return <CheckCheck className="w-2 h-2 text-blue-500" />;
+      case 'seen':
+        return <CheckCheck className="w-3 h-3 text-green-500" />;
       default:
         return <Clock className="w-2 h-2 text-gray-400" />;
     }
@@ -182,15 +182,15 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
   const handleFileDownload = (message) => {
     const link = document.createElement('a');
     link.href = message.fileUrl;
-    link.download = message.fileName || 'download';
+    link.download = message.file_name || 'download';
     link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const getFileIcon = (fileName, fileType) => {
-    const extension = fileName?.split('.').pop()?.toLowerCase();
+  const getFileIcon = (file_name, fileType) => {
+    const extension = file_name?.split('.').pop()?.toLowerCase();
     const type = fileType?.toLowerCase();
     
     // PDF files
@@ -227,8 +227,8 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
     return <File className="w-8 h-8 text-gray-500" />;
   };
 
-  const getFileTypeLabel = (fileName, fileType) => {
-    const extension = fileName?.split('.').pop()?.toLowerCase();
+  const getFileTypeLabel = (file_name, fileType) => {
+    const extension = file_name?.split('.').pop()?.toLowerCase();
     const type = fileType?.toLowerCase();
     
     if (extension === 'pdf' || type?.includes('pdf')) return 'PDF Document';
@@ -397,7 +397,9 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
               {/* Messages for this date */}
               <div className="space-y-3">
                 {group.messages.map((message, messageIndex) => {
-                  const isOwnMessage = message.sender?.id === currentUserId;
+                  const isMessageFromMe = message.sender?.id === currentUserId;
+                  const isOptimistic = ['uploading', 'sending', 'failed'].includes(message.status);
+                  const isOwnMessage = isMessageFromMe || isOptimistic;
                   const prevMessage = messageIndex > 0 ? group.messages[messageIndex - 1] : null;
                   const nextMessage = messageIndex < group.messages.length - 1 ? group.messages[messageIndex + 1] : null;
                   
@@ -422,44 +424,46 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                         { message.replyTo && (
                           <div 
                             onClick={() => handleReplyClick(message.replyTo)}
-                            className={`mb-0 p-1 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors ${
+                            className={`mb-0 px-1 p-[0.5px] rounded border-l-2 cursor-pointer hover:bg-gray-50 transition-colors ${
                               isOwnMessage 
                                 ? 'bg-green-50 border-green-400 ml-4' 
                                 : 'bg-gray-50 border-gray-400 mr-4'
                             }`}
                           >
-                            <p className="text-xs font-medium text-gray-600 mb-0">
+                            <p className="text-[8px] font-medium text-gray-600 mb-0">
                               {message.replyTo.sender?.name}
                             </p>
-                            <p className="text-xs text-gray-700 truncate">
+                            <p className="text-[10px] text-gray-700 truncate">
                               {message.replyTo.message}
                             </p>
                           </div>
                         )}
 
                         <div
-                          className={`rounded-2xl px-2 py-1 transition-all duration-200 ${
+                          className={`rounded-2xl px-3 py-[.5px] transition-all duration-200 ${
                             isOwnMessage
-                              ? 'bg-green-200 text-black'
-                              : 'bg-white border border-gray-200 text-gray-800 shadow-sm'
+                              ? message.type === 'text'
+                                ? 'bg-green-200 text-black'
+                                : ''
+                              : message.type === 'text' ? 'bg-white border border-gray-200 text-gray-800 shadow-sm' : ''
                           }
                           ${
                             // Adjust border radius for message grouping
                             isOwnMessage
                               ? isFirstInGroup
                                 ? isLastInGroup
-                                  ? 'rounded-2xl'
-                                  : 'rounded-2xl rounded-br-md'
+                                  ? 'rounded'
+                                  : 'rounded'
                                 : isLastInGroup
-                                ? 'rounded-2xl rounded-tr-md'
-                                : 'rounded-r-md rounded-l-2xl'
+                                ? 'rounded'
+                                : 'rounded'
                               : isFirstInGroup
                                 ? isLastInGroup
-                                  ? 'rounded-2xl'
-                                  : 'rounded-2xl rounded-bl-md'
+                                  ? 'rounded'
+                                  : 'rounded'
                                 : isLastInGroup
-                                ? 'rounded-2xl rounded-tl-md'
-                                : 'rounded-l-md rounded-r-2xl'
+                                ? 'rounded'
+                                : 'rounded'
                           }
                           `}
                           onContextMenu={(e) => {
@@ -490,7 +494,7 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                           {/* Message content */}
                           <div className="space-y-2">
                             {message.type === 'text' && (
-                              <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                              <p className="text-[12px] whitespace-pre-wrap break-words leading-relaxed">
                                 {message.message}
                               </p>
                             )}
@@ -504,7 +508,7 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                   <img
                                     src={message.fileUrl}
                                     alt="Shared image"
-                                    className="rounded-lg max-w-full h-auto hover:opacity-90 transition-opacity"
+                                    className="rounded-lg max-w-24 h-auto hover:opacity-90 transition-opacity"
                                   />
                                 </div>
                                 {message.message && (
@@ -525,19 +529,19 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                     <img
                                       src={message.thumbnailUrl}
                                       alt="Video thumbnail"
-                                      className="rounded-lg max-w-full h-auto"
+                                      className="rounded-lg max-w-24 h-14"
                                     />
                                   ) : (
                                     <video
                                       src={message.fileUrl}
-                                      className="rounded-lg max-w-full h-auto"
+                                      className="rounded-lg max-w-24 h-24"
                                       poster={message.thumbnailUrl}
                                       preload="metadata"
                                     />
                                   )}
-                                  <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center group-hover:bg-opacity-40 transition-all">
-                                    <div className="bg-white bg-opacity-90 rounded-full p-3">
-                                      <Play className="w-6 h-6 text-gray-800" />
+                                  <div className="absolute inset-0 flex items-center justify-center group-hover:bg-opacity-40 transition-all">
+                                    <div className="bg-white bg-opacity-90 rounded-full p-1">
+                                      <Play className="w-2 h-2 text-gray-800" />
                                     </div>
                                   </div>
                                 </div>
@@ -556,18 +560,18 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                   : 'bg-gray-100 border-gray-300'
                               }`}>
                                 <div className="flex-shrink-0">
-                                  {getFileIcon(message.fileName, message.fileType)}
+                                  {getFileIcon(message.file_name, message.fileType)}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className={`text-sm font-medium truncate ${
                                     isOwnMessage ? 'text-white' : 'text-gray-800'
                                   }`}>
-                                    {message.fileName || 'Unknown file'}
+                                    {message.file_name || 'Unknown file'}
                                   </p>
                                   <p className={`text-xs ${
                                     isOwnMessage ? 'text-green-100' : 'text-gray-500'
                                   }`}>
-                                    {getFileTypeLabel(message.fileName, message.fileType)}
+                                    {getFileTypeLabel(message.file_name, message.fileType)}
                                   </p>
                                   {message.fileSize && (
                                     <p className={`text-xs ${
@@ -598,7 +602,7 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                 isOwnMessage={isOwnMessage}
                                 className={`${
                                   isOwnMessage 
-                                    ? 'bg-green-400 bg-opacity-20' 
+                                    ? 'bg-green-400' 
                                     : 'bg-gray-100'
                                 } rounded-lg`}
                               />
@@ -610,10 +614,9 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                 { message.message }
                               </p>
                             )}
-                          </div>
+                          </div>                         
 
                           {/* Message metadata - only show on last message in group */}
-                          {isLastInGroup && (
                             <div className={`flex items-center justify-end space-x-1 ${
                               isOwnMessage ? 'text-green-100' : 'text-gray-500'
                             }`}>
@@ -626,7 +629,6 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                                 </div>
                               )}
                             </div>
-                          )}
                         </div>
 
                         {/* Message Actions - Show on hover/selection */}
@@ -702,20 +704,21 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
                             </button>
                           ))}
                         </div>
+
                         {/* Reactions */}
                         {message.reactions && message.reactions.length > 0 && (
-                            <div className="order-1 self-end">
-                              {message.reactions.map((reaction, index) => (
-                                  <div
-                                      key={index}
-                                      className="absolute left-1 bg-white p-1 rounded-full"
-                                      style={{ fontSize: '12px', padding: '0px', bottom: '-12px' }}
-                                  >
-                                    { reactions.find(r => r.name === reaction.emoji).emoji ?? reaction.emoji }
-                                    {/*<span className="text-xs">{message.count}</span>*/}
-                                  </div>
-                              ))}
-                            </div>
+                          <div className="order-1 self-end">
+                            {message.reactions.map((reaction, index) => (
+                              <div
+                                  key={index}
+                                  className="absolute left-1 bg-white p-1 rounded-full"
+                                  style={{ fontSize: '12px', padding: '0px', bottom: '-12px' }}
+                              >
+                                { reactions.find(r => r.name === reaction.emoji).emoji ?? reaction.emoji }
+                                {/*<span className="text-xs">{message.count}</span>*/}
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
 

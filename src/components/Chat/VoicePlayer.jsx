@@ -98,7 +98,7 @@ const VoicePlayer = ({ audioUrl, duration, isOwnMessage, className = '' }) => {
   const progress = audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0;
 
   return (
-    <div className={`flex items-center space-x-3 p-3 rounded-lg ${className}`}>
+    <div className={`flex items-center space-x-2 p-0 rounded-lg ${className}`}>
       <audio ref={audioRef} src={audioUrl} preload="metadata" />
       
       {/* Play/Pause Button */}
@@ -113,18 +113,18 @@ const VoicePlayer = ({ audioUrl, duration, isOwnMessage, className = '' }) => {
         title={isPlaying ? 'Pause' : 'Play'}
       >
         {isLoading ? (
-          <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          <div className="w-2 h-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
         ) : isPlaying ? (
-          <Pause className="w-5 h-5" />
+          <Pause className="w-3 h-3" />
         ) : (
-          <Play className="w-5 h-5" />
+          <Play className="w-3 h-3" />
         )}
       </button>
 
       {/* Waveform/Progress Bar */}
-      <div className="flex-1 space-y-1">
+      <div className="flex-1 space-y-[8px] pt-6">
         {/* Visual Waveform (Mock) */}
-        <div className="flex items-center space-x-1 h-8">
+        <div className="flex items-center space-x-[2px] h-0">
           {Array.from({ length: 30 }).map((_, i) => {
             const barProgress = (i / 30) * 100;
             const isActive = barProgress <= progress;
@@ -142,7 +142,7 @@ const VoicePlayer = ({ audioUrl, duration, isOwnMessage, className = '' }) => {
                       : 'bg-gray-300'
                 }`}
                 style={{
-                  height: `${20 + Math.random() * 20}px`,
+                  height: `${10 + Math.random() * 10}px`,
                   minHeight: '4px'
                 }}
               />
@@ -151,7 +151,7 @@ const VoicePlayer = ({ audioUrl, duration, isOwnMessage, className = '' }) => {
         </div>
 
         {/* Progress Bar */}
-        <div 
+        {/* <div 
           className="w-full bg-gray-200 bg-opacity-30 rounded-full h-1 cursor-pointer"
           onClick={handleSeek}
         >
@@ -161,14 +161,14 @@ const VoicePlayer = ({ audioUrl, duration, isOwnMessage, className = '' }) => {
             }`}
             style={{ width: `${progress}%` }}
           />
-        </div>
+        </div> */}
 
         {/* Time Display */}
         <div className={`flex justify-between text-xs ${
           isOwnMessage ? 'text-green-100' : 'text-gray-500'
         }`}>
-          <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(audioDuration)}</span>
+          <span className='text-[10px]'>{formatTime(currentTime)}</span>
+          {/* <span>{formatTime(audioDuration)}</span> */}
         </div>
       </div>
 

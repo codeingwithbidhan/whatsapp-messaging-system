@@ -1,7 +1,7 @@
 // src/services/socket.js
 import { io } from "socket.io-client";
 import store from '../store/store';
-import { setOnlineUsers, addMessage, updateMessageStatus, setTyping } from '../store/slices/chatSlice';
+import { setOnlineUsers, receiveNewMessage, updateMessageStatus, setTyping } from '../store/slices/chatSlice';
 import { toast } from 'react-hot-toast';
 import {
     receiveIncomingCall,
@@ -76,8 +76,13 @@ class SocketService {
         });
 
         // Listen new message
-        this.socket.on('private_message', (msg) => {
-            store.dispatch(addMessage(msg));
+        this.socket.on('private_message', (msg, callback) => {
+            if (callback) {
+                callback(); 
+            }
+            console.log('msg', msg)
+            // store.dispatch(addMessage(msg));
+            store.dispatch(receiveNewMessage(msg));
         });
 
         // Listen message status updates
@@ -155,6 +160,10 @@ class SocketService {
 
     sendMessage(chatId, message) {
         this.socket?.emit('sendMessage', { chatId, message });
+    }
+
+    markAsSeen(chatId, viewerId, notifyReceiverIds) {
+        this.socket?.emit('markAsSeen', { chatId, viewerId, notifyReceiverIds });
     }
 
     startTyping(chatId, senderId, receiverIds) {

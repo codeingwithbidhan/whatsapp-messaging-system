@@ -55,6 +55,37 @@ export const createChat = createAsyncThunk(
   }
 );
 
+export const uploadFile = createAsyncThunk(
+  'chat/uploadFile',
+  async ({ formData, tempId, chatId }, { rejectWithValue, dispatch }) => {
+    try {
+      const config = {
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          dispatch(updateMessageProgress({ 
+            tempId, 
+            chatId, 
+            progress: percentCompleted 
+          }));
+        },
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      };
+
+      const response = await chatAPI.uploadFile(formData, config);
+      return response.data;
+
+    } catch (error) {
+      return rejectWithValue({ 
+        error: error.response?.data || "File upload failed",
+        chatId,
+        tempId
+      });
+    }
+  }
+);
+
 // Async thunks
 export const fetchChats = createAsyncThunk(
   'chat/fetchChats',
@@ -85,39 +116,60 @@ export const fetchMessages = createAsyncThunk(
 export const sendMessage = createAsyncThunk(
   'chat/sendMessage',
   async (messageData, { rejectWithValue, getState, dispatch }) => {
-    const tempId = Date.now().toString();
+    // const tempId = Date.now().toString();
+    const tempId = messageData.id;
     try {
       const { auth } = getState();
+      const currentUserId = auth.user.id;
       // Temporary message for optimistic UI
       const tempMessage = {
         id: tempId,
         chatId: messageData.chatId,
-        message: messageData.message,
+        message: messageData.message || '',
         type: messageData.type,
         sender: auth.user,
         status: "sending",
         created_at: new Date().toISOString(),
-        fileUrl: messageData.file_path || null,
-        thumbnailUrl: messageData.file_path || null,
+        file_path: messageData.file_path || null,
+        thumbnailUrl: messageData.thumbnailUrl || messageData.file_path || null,
+        file_name: messageData.file_name || null,
+        fileSize: messageData.fileSize || null,
+        fileOriginalType: messageData.fileOriginalType || null,
         reactions: [],
         reply_to: messageData.reply_to || null,
         replyTo: messageData.replyTo || null,
       };
+      
 
       // Add temp message to redux store immediately
-      dispatch(addMessage(tempMessage));
-
+      // dispatch(addMessage(tempMessage));
+      if (!messageData.file_path) {
+        dispatch(addMessage({ ...tempMessage, currentUserId: currentUserId }));
+      }
+      
       // API call to backend
       const response = await chatAPI.sendMessages(messageData);
+
+      // API successful: ID আপডেট করুন
+      dispatch(updateMessageId({ tempId, chatId: messageData.chatId, newMessage: response.data }));
       return { tempId, message: response.data };
 
     } catch (error) {
       return rejectWithValue({
         error: error.response?.data || "Failed to send message",
         chatId: messageData.chatId,
-        tempId
+        tempId,
+        fileUrl: messageData.file_path,
       });
     }
+  }
+);
+
+export const receiveNewMessage = createAsyncThunk(
+  'chat/receiveNewMessage',
+  async (payload, { dispatch, getState }) => {
+    const currentUserId = getState().auth.user.id;
+    dispatch(addMessage({...payload, currentUserId: currentUserId }));
   }
 );
 
@@ -167,10 +219,27 @@ const chatSlice = createSlice({
     setActiveChat: (state, action) => {
       state.activeChat = action.payload;
     },
-    addMessage: (state, action) => {
-      const { chatId } = action.payload;
-      const message = action.payload
-
+    updateMessageProgress: (state, action) => {
+      const { tempId, chatId, progress } = action.payload;
+      // নির্দিষ্ট চ্যাট আইডি-এর মেসেজ অ্যারে খুঁজে বের করা
+      const messages = state.messages[chatId];
+      if (messages) {
+        // টেম্প মেসেজটি খুঁজে বের করা
+        const messageIndex = messages.findIndex(msg => msg.id === tempId);
+        if (messageIndex !== -1) {
+          state.messages[chatId][messageIndex].progress = progress;
+          if (progress < 100) {
+            state.messages[chatId][messageIndex].status = 'uploading';
+          } else if (progress === 100) {
+            state.messages[chatId][messageIndex].status = 'sending';
+          }
+        }
+      }
+    },
+    addMessageReducer: (state, action) => {
+      // currentUserId কে পেলোড থেকে নিন (যা Thunk পাস করবে)
+      const { chatId, sender, currentUserId, ...message } = action.payload;
+      
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
       }
@@ -179,11 +248,20 @@ const chatSlice = createSlice({
       const chat = state.chats.find(c => c.chatId === chatId);
       if (chat) {
         chat.updated_at = message.created_at;
-        chat.unreadCount++
+
+        // 🎯 লজিক ঠিক করা হলো: যদি প্রেরক আপনি না হন, তবেই unreadCount বাড়ান
+        if (sender.id !== currentUserId) {
+          chat.unreadCount = (chat.unreadCount || 0) + 1;
+        }
+        
         chat.lastMessage = {
+          id: message.id,
           message: message.message,
           created_at: message.created_at,
+          status: message.status,
         };
+
+        // চ্যাট লিস্ট সর্টিং
         state.chats.sort((a, b) => {
           const dateA = new Date(a.updated_at).getTime();
           const dateB = new Date(b.updated_at).getTime();
@@ -191,14 +269,63 @@ const chatSlice = createSlice({
         });
       }
     },
+    updateMessageId: (state, action) => {
+      const { chatId, tempId, newMessage } = action.payload;
+      
+      const messageArray = state.messages[chatId];
+      if (messageArray) {
+        const tempIndex = messageArray.findIndex(m => String(m.id) === tempId);
+          
+        if (tempIndex !== -1) {
+          // 1. নতুন মেসেজ দিয়ে temp মেসেজটি প্রতিস্থাপন করুন
+          messageArray[tempIndex] = newMessage;
+          console.log('newMessage', newMessage);
+          
+
+          // 2. চ্যাট লিস্টে lastMessage আপডেট করুন
+          const chat = state.chats.find(c => c.chatId === chatId);
+          if (chat && String(chat.lastMessage?.id) === tempId) {
+            chat.lastMessage = {
+              id: newMessage.id,
+              message: newMessage.message ?? newMessage.file_name,
+              created_at: newMessage.created_at,
+              status: newMessage.status,
+            };
+          }      
+        }
+      }
+    },
+    // 1. নতুন অ্যাকশন: মেসেজের স্ট্যাটাস আপডেট করার জন্য
     updateMessageStatus: (state, action) => {
       const { messageId, status } = action.payload;
-      Object.values(state.messages).forEach(chatMessages => {
-        const message = chatMessages.find(m => m.id === messageId);
-        if (message) {
-          message.status = status;
+
+      for (const chatId in state.messages) {
+        if (state.messages.hasOwnProperty(chatId)) { // ভালো অভ্যাস
+          const messageArray = state.messages[chatId];
+          
+          const messageIndex = messageArray.findIndex(
+            (msg) => String(msg.id) === String(messageId) // ⬅️ নিরাপদ তুলনা
+          );
+
+          if (messageIndex !== -1) {
+            messageArray[messageIndex].status = status;
+            const chat = state.chats.find(c => String(c.chatId) === String(chatId)); // chat ID তুলনাও নিরাপদ
+            if (chat && String(chat.lastMessage?.id) === String(messageId)) { // ⬅️ নিরাপদ তুলনা
+              chat.lastMessage.status = status;
+            }
+            console.log('last message =>', chat);
+            return; 
+          }
         }
-      });
+      }
+    },
+    // 3. নতুন অ্যাকশন: Unread count রিসেট করার জন্য (যখন চ্যাট খোলা হয়)
+    resetUnreadCount: (state, action) => {
+      const { chatId } = action.payload;
+      const chat = state.chats.find(c => c.chatId === chatId);
+      if (chat) {
+        chat.unreadCount = 0;
+      }
     },
     addMessageReaction: (state, action) => {
       const { chatId, messageId } = action.payload;
@@ -293,26 +420,42 @@ const chatSlice = createSlice({
 
       // Send Message
       .addCase(sendMessage.fulfilled, (state, action) => {
-        const { tempId, message } = action.payload;
+        const { message } = action.payload;
         const chatId = message.chatId;
 
-        const allMessagesByChatId = state.messages[chatId] || [];
-        // find message by tempId
-        const msgIndex = allMessagesByChatId.findIndex(m => m.id === tempId);
-        if (msgIndex !== -1) {
-          allMessagesByChatId[msgIndex] = { ...message };
-        } else {
-          allMessagesByChatId.push({ ...message });
-        }
+        // const allMessagesByChatId = state.messages[chatId] || [];
+        // // find message by tempId
+        // const msgIndex = allMessagesByChatId.findIndex(m => m.id === tempId);
+        // if (msgIndex !== -1) {
+        //   allMessagesByChatId[msgIndex] = { ...message };
+        // } else {
+        //   allMessagesByChatId.push({ ...message });
+        // }
+
+        // 1. চ্যাট মেসেজ অ্যারে আপডেট:
+        // if (state.messages[chatId]) {
+        //   // tempId দিয়ে লোকাল মেসেজটি খুঁজে বের করুন
+        //   const tempIndex = state.messages[chatId].findIndex(m => m.id === tempId);
+
+        //   if (tempIndex !== -1) {
+        //     state.messages[chatId][tempIndex] = {
+        //       ...message,
+        //       status: 'sent',
+        //       id: message.id,
+        //     };
+        //   }
+        // }
 
         // update lastMessage directly
         const chat = state.chats.find(c => c.chatId === chatId);
         if (chat) {
-          chat.updated_at = message.created_at;
-          chat.lastMessage = {
-            message: message.message,
-            created_at: message.created_at,
-          };
+          // chat.updated_at = message.created_at;
+          // chat.lastMessage = {
+          //   id: message.id,
+          //   message: message.message,
+          //   created_at: message.created_at,
+          //   status: 'sent',
+          // };
 
           // 2. সর্টিং (অত্যন্ত জরুরি!)
           state.chats.sort((a, b) => {
@@ -325,12 +468,13 @@ const chatSlice = createSlice({
       })
       .addCase(sendMessage.rejected, (state, action) => {
         const { chatId, tempId } = action.payload || action.meta.arg;
-        const allMessagesByChatId = state.messages[chatId] || [];
-        const msg = allMessagesByChatId.find((m) => m.id === tempId);
-        if (msg) {
-          msg.status = "failed";
+        if (state.messages[chatId]) {
+          const tempMessage = state.messages[chatId].find(m => m.id === tempId);
+          if (tempMessage) {
+            tempMessage.status = 'failed';
+            // অপশনাল: মেসেজটি রিমুভও করে দিতে পারেন
+          }
         }
-        console.error('Message send failed:', action.payload);
       })
 
       // Add Reaction
@@ -392,8 +536,11 @@ const chatSlice = createSlice({
 
 export const {
   setActiveChat,
-  addMessage,
+  updateMessageProgress,
+  addMessageReducer: addMessage,
+  updateMessageId,
   updateMessageStatus,
+  resetUnreadCount,
   addMessageReaction,
   removeMessageReaction,
   setOnlineUsers,
