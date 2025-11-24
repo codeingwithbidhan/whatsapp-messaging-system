@@ -1,27 +1,75 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import socketService from '../../socket/socket';
+import { fetchAgoraToken } from '../../api/chat';
+import { agoraStore } from '../../lib/AgoraStore';
+import store from '../store';
 
 // Async thunks for call operations
 export const initiateCall = createAsyncThunk(
-    'call/initiate',
-    async ({ participantId, callType }, { rejectWithValue, getState }) => {
-        try {
-            const { auth } = getState();
-            const callData = {
-                id: `call_${Date.now()}`,
-                callerId: auth.user.id,
-                participantId,
-                callType, // 'voice' or 'video'
-                status: 'calling',
-                createdAt: new Date().toISOString(),
-            };
+  'agoraCall/initiate', 
+  async ({ participant,caller, callType, channelId, activeChat }, { rejectWithValue, getState }) => {
+    try {
+      const { auth } = getState();
+      const callerId = auth.user.id;
+      const participantId = participant?.id;
 
-            // In a real app, this would make an API call
-            // await callAPI.initiateCall(callData);
-            return callData;
-        } catch (error) {
-            return rejectWithValue(error.message || 'Failed to initiate call');
-        }
+
+      // 1. ব্যাকএন্ডে রিকোয়েস্টের জন্য ডেটা
+      const tokenData = { 
+        channelName: channelId, 
+        callerId: callerId, // কলার টোকেন তৈরির জন্য
+        receiverId: participantId // রিসিভার টোকেন তৈরির জন্য
+      };
+
+      // 2. ব্যাকএন্ড থেকে দ্বৈত টোকেন fetch করুন
+      const response = await fetchAgoraToken(tokenData);
+      const tokens = response.data; // আশা করা হচ্ছে: { callerToken, receiverToken }
+
+      // 3. টোকেন অনুপস্থিত থাকলে ত্রুটি হ্যান্ডেল করুন
+      if (!tokens || !tokens.callerToken || !tokens.receiverToken) {
+        console.error("Token generation failed or response incomplete.", tokens);
+        return rejectWithValue('Failed to receive valid tokens from server.');
+      }
+      
+      // 4. বেস কল ডেটা তৈরি করুন (যা কলারের Redux State এ যাবে)
+      
+      const baseCallData = {
+        callerId: callerId, 
+        receiverId: participantId,
+        chatId: activeChat,
+        channelName: channelId,
+        callType, 
+        status: 'calling',
+        created_at: new Date().toISOString(),
+      };
+      
+      // 5. কলারের জন্য ফাইনাল ডেটা (Caller Token সহ)
+      const callDataForCaller = {
+        ...baseCallData,
+        participant: participant,
+        token: tokens.callerToken, // কলার তার নিজস্ব টোকেন ব্যবহার করবে
+      };
+      
+      // 6. রিসিভারের জন্য সিগন্যালিং ডেটা (Receiver Token সহ)
+      const signalDataForReceiver = {
+        ...baseCallData,
+        caller: caller,
+        // সিগন্যালিং ডেটাতে রিসিভারের টোকেনটি পাঠানো হলো
+        token: tokens.receiverToken, 
+      };
+      
+      // 7. সকেটের মাধ্যমে প্রতিপক্ষকে আমন্ত্রণ জানান (সিগন্যালিং)
+      socketService.agoraCallRequest(signalDataForReceiver);
+
+      // 8. Redux state আপডেট করার জন্য কলারের ডেটা ফেরত দিন
+      return callDataForCaller;
+      
+    } catch (error) {
+      // যদি নেটওয়ার্ক বা API কল ব্যর্থ হয়
+      console.error("Initiate Call Thunk Error:", error);
+      return rejectWithValue(error.message || 'Failed to initiate call');
     }
+  }
 );
 
 export const acceptCall = createAsyncThunk (
@@ -30,7 +78,7 @@ export const acceptCall = createAsyncThunk (
         try {
             // In a real app, this would make an API call
             // await callAPI.acceptCall(callId);
-
+            console.log('accept call callId =>', callId);
             return { callId, acceptedAt: new Date().toISOString() };
         } catch (error) {
             return rejectWithValue(error.message || 'Failed to accept call');
@@ -40,12 +88,10 @@ export const acceptCall = createAsyncThunk (
 
 export const declineCall = createAsyncThunk(
     'call/decline',
-    async (callId, { rejectWithValue }) => {
+    async ({ rejectWithValue }) => {
         try {
-            // In a real app, this would make an API call
-            // await callAPI.declineCall(callId);
-
-            return { callId, declinedAt: new Date().toISOString() };
+            store.dispatch(resetCallState());
+            // return { callId, declinedAt: new Date().toISOString() };
         } catch (error) {
             return rejectWithValue(error.message || 'Failed to decline call');
         }
@@ -54,12 +100,44 @@ export const declineCall = createAsyncThunk(
 
 export const endCall = createAsyncThunk(
     'call/end',
-    async (callId, { rejectWithValue }) => {
+    async ({ rejectWithValue }) => {
         try {
-            // In a real app, this would make an API call
-            // await callAPI.endCall(callId);
 
-            return { callId, endedAt: new Date().toISOString() };
+            store.dispatch(resetCallState());
+            
+            // // ১. AgoraStore থেকে লোকাল ট্র্যাক অবজেক্টগুলো উদ্ধার করা
+            // const rtcClient = agoraStore.get('rtcClient');
+            // const localVideoTrack = agoraStore.get('localVideoTrack');
+            // const localAudioTrack = agoraStore.get('localAudioTrack');
+            
+            // try {
+            //     if (localVideoTrack) {
+            //         localVideoTrack.close();
+            //         localVideoTrack.stop();
+            //     }
+            //     if (localAudioTrack) {
+            //         localAudioTrack.close();
+            //         localAudioTrack.stop();
+            //     }
+            // } catch (e) {
+            //     console.error("Error closing local tracks:", e);
+            //     cleanupSuccessful = false;
+            // }
+
+            // if (rtcClient) {
+            //     try {
+            //         await rtcClient.leave(); 
+            //     } catch (error) {
+            //         console.warn("Error leaving Agora channel (Might be already left, proceeding to cleanup):", error);
+            //     }
+            // }
+
+            // agoraStore.clearAll();
+
+            // console.log('Call cleanup complete. Redux state dispatched.');
+
+            // return { callId, endedAt: new Date().toISOString() };
+            return 
         } catch (error) {
             return rejectWithValue(error.message || 'Failed to end call');
         }
@@ -71,15 +149,13 @@ const callSlice = createSlice({
     initialState: {
         // Current active call
         activeCall: null,
+        isCallModalOpen: false,
+        callStatus: 'idle', // idle, calling, ringing,busy, connecting, connected, ended, failed
+        callType: null, // voice, video
+        callDuration: 0,
 
         // Call history
         callHistory: [],
-
-        // Call states
-        isCallModalOpen: false,
-        callStatus: 'idle', // idle, calling, ringing, connecting, connected, ended, failed
-        callType: null, // voice, video
-        callDuration: 0,
 
         // Call participants
         caller: null,
@@ -108,6 +184,12 @@ const callSlice = createSlice({
         // Loading and error states
         loading: false,
         error: null,
+
+        // WebRTC states: Now stores Agora Track ID (string) or null
+        localVideoTrackId: null, 
+        localAudioTrackId: null, 
+        remoteVideoTrackId: null,
+        remoteAudioTrackId: null,
     },
     reducers: {
         // Call modal management
@@ -181,42 +263,110 @@ const callSlice = createSlice({
             state.showControls = action.payload;
         },
 
+        // Agora
+        /**
+        * @param {Object} action.payload
+        * @param {import('agora-rtc-sdk-ng').ILocalTrack | null} action.payload.videoTrack
+        * @param {import('agora-rtc-sdk-ng').ILocalTrack | null} action.payload.audioTrack
+        */
+        setLocalTracks: (state, action) => {
+            const { videoTrack, audioTrack } = action.payload;
+            
+            // 1. Local Video Track
+            if (videoTrack) {
+                // আসল ট্র্যাক অবজেক্ট AgoraStore-এ সেভ করা হলো
+                agoraStore.set('localVideoTrack', videoTrack);
+                
+                // Redux Store-এ শুধু ID সেভ করা হলো
+                state.localVideoTrackId = videoTrack._ID;
+            } else {
+                agoraStore.set('localVideoTrack', null);
+                state.localVideoTrackId = null;
+            }
+
+            // 2. Local Audio Track
+            if (audioTrack) {
+                // আসল ট্র্যাক অবজেক্ট AgoraStore-এ সেভ করা হলো
+                agoraStore.set('localAudioTrack', audioTrack);
+                
+                // Redux Store-এ শুধু ID সেভ করা হলো
+                console.log('audioTrack._ID', audioTrack._ID);
+                
+                state.localAudioTrackId = audioTrack._ID;
+            } else {
+                agoraStore.set('localAudioTrack', null);
+                state.localAudioTrackId = null;
+            }
+
+            console.log('Local Track IDs saved in Redux:', { 
+                video: state.localVideoTrackId, 
+                audio: state.localAudioTrackId 
+            });
+        },
+        setRemoteTracks: (state, action) => {
+            const { videoTrack } = action.payload;                    
+            
+            // 1. Local Video Track
+            if (videoTrack) {                
+                // আসল ট্র্যাক অবজেক্ট AgoraStore-এ সেভ করা হলো
+                agoraStore.set('remoteVideoTrack', videoTrack);
+                
+                // Redux Store-এ শুধু ID সেভ করা হলো
+                state.remoteVideoTrackId = videoTrack._ID;
+            } else {
+                agoraStore.set('remoteVideoTrack', null);
+                state.remoteVideoTrackId = null;
+            }
+        },
+
         // WebRTC stream management
-        setLocalStream: (state, action) => {
-            console.log('local stream test form redux => ', action.payload)
-            state.localStream = action.payload;
-        },
+        // setLocalStream: (state, action) => {
+        //     console.log('local stream test form redux => ', action.payload)
+        //     state.localStream = action.payload;
+        // },
 
-        setRemoteStream: (state, action) => {
-            state.remoteStream = action.payload;
-        },
+        // setRemoteStream: (state, action) => {
+        //     // state.remoteStream = action.payload;
+        //     const { videoTrack, uid } = action.payload;
+        //     state.remoteStream[uid].videoTrack = videoTrack;
+        // },
 
-        setRemoteStreamReady: (state, action) => {
-            state.remoteStreamReady = action.payload;
-        },
+        // setRemoteStreamReady: (state, action) => {
+        //     state.remoteStreamReady = action.payload;
+        // },
 
-        setPeerConnection: (state, action) => {
-            state.peerConnection = action.payload;
-        },
+        // setPeerConnection: (state, action) => {
+        //     state.peerConnection = action.payload;
+        // },
 
-        // Socket connection
-        setSocketConnected: (state, action) => {
-            state.isConnected = action.payload;
-        },
+        // // Socket connection
+        // setSocketConnected: (state, action) => {
+        //     state.isConnected = action.payload;
+        // },
 
         // Incoming call handling
         receiveIncomingCall: (state, action) => {
-            // callType:"voice"
-            // callerId:1
-            // offer:sdp:"v=0\r\no=- 5936259864152891569 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=extmap-allow-mixed\r\na=msid-semantic: WMS 114c22e5-e880-4a28-bedc-1562ffeab868\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:58Ep\r\na=ice-pwd:ulYY/oIHMxKuTXi3I38MBRGw\r\na=ice-options:trickle\r\na=fingerprint:sha-256 65:80:92:7D:C8:44:55:36:C2:EF:AB:A5:23:3E:A2:0D:D2:76:22:39:8A:7C:66:B6:E9:9A:49:00:F5:BD:E1:7D\r\na=setup:actpass\r\na=mid:0\r\na=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level\r\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\r\na=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\na=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=sendrecv\r\na=msid:114c22e5-e880-4a28-bedc-1562ffeab868 29a39afa-c8ab-4ded-ab6f-093447f2962f\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:111 opus/48000/2\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=10;useinbandfec=1\r\na=rtpmap:63 red/48000/2\r\na=fmtp:63 111/111\r\na=rtpmap:9 G722/8000\r\na=rtpmap:0 PCMU/8000\r\na=rtpmap:8 PCMA/8000\r\na=rtpmap:13 CN/8000\r\na=rtpmap:110 telephone-event/48000\r\na=rtpmap:126 telephone-event/8000\r\na=ssrc:4215845984 cname:e+dhG4gLoA+dQg0P\r\na=ssrc:4215845984 msid:114c22e5-e880-4a28-bedc-1562ffeab868 29a39afa-c8ab-4ded-ab6f-093447f2962f\r\n"
-            // type : "offer"
             const callData = action.payload;
             state.activeCall = callData;
             state.isCallModalOpen = true;
             state.callStatus = 'ringing';
             state.callType = callData.callType;
-            state.caller = callData.caller ?? 'Dai Nai';
+            state.participant = callData.participant ?? '';
             state.isMinimized = false;
+        },
+
+        /**
+        * ইনকামিং কল রিসিভ করার পর স্ট্যাটাস পরিবর্তন করে
+        * Agora-তে জয়েন করার জন্য তৈরি করা হবে।
+        */
+        acceptCall: (state) => {
+            if (state.activeCall && state.callStatus === 'ringing') {
+                // স্ট্যাটাস connecting করে দেওয়া হলো। 
+                // এবার Hook বা Component Agora জয়েন করার প্রক্রিয়া শুরু করবে।
+                state.callStatus = 'connecting';
+                // state.isCallModalOpen = false; // রিংগিং মডাল বন্ধ করা হলো
+                console.log('Call accepted. Status changed to connecting.');
+            }
         },
 
         // Call history
@@ -264,6 +414,8 @@ const callSlice = createSlice({
             state.isMinimized = false;
             state.showControls = true;
             state.error = null;
+            store.localVideoTrackId = null;
+            store.localAudioTrackId = null;
         },
     },
     extraReducers: (builder) => {
@@ -279,6 +431,7 @@ const callSlice = createSlice({
                 state.callStatus = 'calling';
                 state.isCallModalOpen = true;
                 state.callType = action.payload.callType;
+                state.participant = action.payload.participant
             })
             .addCase(initiateCall.rejected, (state, action) => {
                 state.loading = false;
@@ -302,47 +455,32 @@ const callSlice = createSlice({
                 state.callStatus = 'failed';
             })
 
-            // Decline Call
-            .addCase(declineCall.fulfilled, (state, action) => {
-                state.callStatus = 'ended';
-                state.isCallModalOpen = false;
-                state.activeCall = null;
+            // // Decline Call
+            // .addCase(declineCall.fulfilled, (state, action) => {
+            //     console.log('decline fullfiled', action.payload)
+            //     state.callStatus = 'idle';
+            //     state.isCallModalOpen = false;
+            //     state.activeCall = null;
+            //     state.participant = null;
+            // })
 
-                // Add to call history
-                // if (state.activeCall) {
-                //     state.callHistory.unshift({
-                //         ...state.activeCall,
-                //         status: 'declined',
-                //         endedAt: action.payload.declinedAt,
-                //     });
-                // }
-            })
-
-            // End Call
-            .addCase(endCall.fulfilled, (state, action) => {
-                // Add to call history
-                // if (state.activeCall) {
-                //     state.callHistory.unshift({
-                //         ...state.activeCall,
-                //         status: 'ended',
-                //         duration: state.callDuration,
-                //         endedAt: action.payload.endedAt,
-                //     });
-                // }
-
-                // Reset call state
-                state.activeCall = null;
-                state.callStatus = 'ended';
-                state.isCallModalOpen = false;
-                state.callDuration = 0;
-                state.isMinimized = false;
-                state.showControls = true;
-                state.isMuted = false;
-                state.isVideoEnabled = true;
-                state.isSpeakerOn = false;
-                state.cameraError = null;
-                state.isCameraLoading = false;
-            });
+            // // End Call
+            // .addCase(endCall.fulfilled, (state, action) => {
+            //     // Reset call state
+            //     state.activeCall = null;
+            //     state.callStatus = 'idle';
+            //     state.isCallModalOpen = false;
+            //     state.callDuration = 0;
+            //     state.isMinimized = false;
+            //     state.showControls = true;
+            //     state.isMuted = false;
+            //     state.isVideoEnabled = true;
+            //     state.isSpeakerOn = false;
+            //     state.cameraError = null;
+            //     state.isCameraLoading = false;
+            //     store.localVideoTrackId = null;
+            //     store.localAudioTrackId = null;
+            // });
     },
 });
 
@@ -358,6 +496,8 @@ export const {
     setCameraError,
     toggleMinimize,
     setShowControls,
+    setLocalTracks,
+    setRemoteTracks,
     setLocalStream,
     setRemoteStream,
     setRemoteStreamReady,

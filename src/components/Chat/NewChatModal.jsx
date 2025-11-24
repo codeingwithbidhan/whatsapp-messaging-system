@@ -62,8 +62,8 @@ const NewChatModal = ({ show, onClose }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md transform transition-all duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-xl font-bold text-gray-800">Start a New Chat</h3>
+        <div className="flex items-center justify-between p-2 pl-4 border-b">
+          <h3 className="text-lg font-bold text-gray-800">Start a New Chat</h3>
           <button onClick={onClose} className="p-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-100">
             <X className="w-6 h-6" />
           </button>

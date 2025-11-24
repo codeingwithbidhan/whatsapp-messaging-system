@@ -1,11 +1,10 @@
-import React, { forwardRef, useState, useEffect, useRef } from 'react';
+import React, { forwardRef,useImperativeHandle, useState, useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import { setCameraLoading, setCameraError, setShowControls } from '../../store/slices/callSlice';
 import {Phone,PhoneOff,Video,VideoOff,Mic,MicOff,Volume2,VolumeX,Minimize2,Maximize2,Settings,Users,MessageCircle
 } from 'lucide-react';
 import store from "../../store/store.js";
-// import { socketService } from '../../socket/socket.js';
-import { agoraStore } from '../../lib/AgoraStore.js';
+import { socketService } from '../../socket/socket.js';
 
 const CallModal = forwardRef(({
                        isOpen,
@@ -28,48 +27,148 @@ const CallModal = forwardRef(({
                        cameraError,
                        isCameraLoading:cameraLoading,
                        isRemoteStreamReady = false,
-                       localStream,
-                       localVideoTrackId,
-                       remoteVideoTrackId
+                       localStream
                    }, ref) => {
     const dispatch = useDispatch();
     const [showControlsLocal, setShowControlsLocal] = useState(true);
     const [controlsTimeout, setControlsTimeout] = useState(null);
-    
 
     // userRef:
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
+    const remoteAudioRef = useRef(null);
+    const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
+    // --- Media Stream Attachment Logic ---
+    // 1. Local Stream অ্যাটাচমেন্টের জন্য লজিক || এখন শুধুমাত্র localStream আপডেট হলে এই কোডটি রান করবে।
+    // CallModal.js - useEffect #1 (সংশোধিত)
     useEffect(() => {
-        if (callType !== "video") return;
+        if (!isOpen || !localStream) {
+            if (!localStream && localVideoRef.current) {
+                localVideoRef.current.srcObject = null; // Cleanup
+            }
+            return;
+        }
+        if (localVideoRef.current && localStream) {
+            if (localVideoRef.current.srcObject === localStream) {
+                return;
+            }
+            console.log("Attaching Local Stream to video element. (FINAL SUCCESS)");
+            localVideoRef.current.srcObject = localStream;
+            localVideoRef.current.play().catch(e => {
+                console.error("Local video play failed:", e);
+            });
+        } else if (!localStream) {
+            console.log('!localStream else if block', localStream)
+            // Cleanup
+            if (localVideoRef.current) {
+                localVideoRef.current.srcObject = null;
+            }
+        }
+        return () => {
+            if (localVideoRef.current) {
+                localVideoRef.current.srcObject = null;
+            }
+        };
+        // Cleanup এর জন্য return ফাংশন আগের মতো রাখুন।
+    }, [isOpen, localStream]); // 💡 ডিপেন্ডেন্সিতে শুধু localStream রাখুন
 
-        const localTrack = agoraStore.get("localVideoTrack");        
+    // 2. Local Track Enable/Disable লজিক (ভিডিও অন/অফ হ্যান্ডলিং)
+    useEffect(() => {
+        if (localStream) {
+            console.log('localStream localStream =>', localStream)
+            // ভিডিও টগল করার সময় শুধুমাত্র এই হুকটি চলবে
+            localStream.getVideoTracks().forEach(track => {
+                track.enabled = isVideoEnabled;
+            });
+        }
+        // এই হুকটি শুধুমাত্র isVideoEnabled বা localStream টগল হলে চলবে
+    }, [isOpen, localStream, isVideoEnabled]);
 
-        if (localTrack && localVideoRef.current) {
-            localTrack.play(localVideoRef.current);
+    // NEW: Attach remote stream from socketService
+    useEffect(() => {
+        if (!isOpen || callType !== 'video' || !isRemoteStreamReady ) return;
+        // Assumes socketService provides a getter or property for the remote stream
+        const remoteStreamFromService = socketService.remoteStream;
+        if (remoteVideoRef.current && remoteStreamFromService) {
+            console.log('Attaching Remote Stream and attempting play...');
+            remoteVideoRef.current.srcObject = remoteStreamFromService;
+            remoteVideoRef.current.play().catch(e => {
+                // AbortError বা অন্যান্য Play Error এখানে ধরা পড়বে
+                console.error("Remote video play failed:", e);
+            });
+        }
+        return () => {
+            if (remoteVideoRef.current) {
+                remoteVideoRef.current.srcObject = null;
+            }
+        };
+    }, [isOpen, callType, isRemoteStreamReady ]);
+
+    useImperativeHandle(ref, () => ({
+        playRemoteStream: () => {
+            const targetRef = callType === 'video' ? remoteVideoRef : remoteAudioRef;
+            if (targetRef.current) {
+                targetRef.current.volume = 1.0;
+                targetRef.current.play().then(() => {
+                    if (callType === 'voice') {
+                        setIsAudioBlocked(false);
+                    }
+                }).catch(error => {
+                    console.warn(`Manual play of ${callType} stream failed:`, error);
+                    if (callType === 'voice') {
+                        setIsAudioBlocked(true);
+                    }
+                });
+            }
+        },
+    }));
+
+    // NEW: Attach remote stream for VOICE CALL
+    useEffect(() => {
+        if (!isOpen || callType !== 'voice' || !isRemoteStreamReady ) {
+            // কল বন্ধ হলে বা অবস্থা পরিবর্তন হলে রিসেট করুন
+            setIsAudioBlocked(false);
+            return;
+        }
+        // socketService-এর remoteStream ব্যবহার করা হচ্ছে
+        const remoteStreamFromService = socketService.remoteStream;
+        if (remoteAudioRef.current && remoteStreamFromService) {
+            console.log('Attaching Remote Audio Stream and attempting play...');
+            remoteAudioRef.current.srcObject = remoteStreamFromService;
+
+            remoteAudioRef.current.play()
+                .then(() => {
+                    console.log("Block hoy nai. kaj koreche");
+                    setIsAudioBlocked(false);
+                })
+                .catch(e => {
+                    if (e.name === 'AbortError') {
+                        console.log("Play attempt aborted safely during cleanup/unmount.");
+                        return;
+                    }
+                    console.error("Remote audio play failed (Likely Autoplay Blocked):", e);
+                    setIsAudioBlocked(true);
+                });
         }
 
         return () => {
-            if (localTrack) localTrack.stop();
+            if (remoteAudioRef.current) {
+                remoteAudioRef.current.srcObject = null;
+            }
         };
-    }, [callStatus, callType, localVideoTrackId]);
+    }, [isOpen, callType, isRemoteStreamReady ]);
 
-    useEffect(() => {
-        if (callType !== "video") return;
-
-        const remoteTrack = agoraStore.get("remoteVideoTrack");
-        console.log('remoteTrack remoteTrack', remoteTrack);
-
-
-        if (remoteTrack && remoteVideoRef.current) {
-            remoteTrack.play(remoteVideoRef.current);
+    const handleStartAudio = () => {
+        if (remoteAudioRef.current) {
+            remoteAudioRef.current.play().then(() => {
+                console.log("Audio playback successfully started by user interaction.");
+                setIsAudioBlocked(false);
+            }).catch(e => {
+                console.error("Manual audio start failed:", e);
+            });
         }
-
-        return () => {
-            if (remoteTrack) remoteTrack.stop();
-        };
-    }, [callStatus, callType, remoteVideoTrackId]);
+    };
 
     // Format call duration
     const formatDuration = (seconds) => {
@@ -110,17 +209,6 @@ const CallModal = forwardRef(({
         }
     };
 
-    const capitalizeFirstLetter = (str) => {
-        // 1. Check if the input is a valid non-empty string.
-        if (!str || typeof str !== 'string' || str.length === 0) {
-            return '';
-        }
-        // 2. Convert the entire string to lowercase first for consistency.
-        const lower = str.toLowerCase();
-        // 3. Return the first character capitalized, concatenated with the rest of the string.
-        return lower.charAt(0).toUpperCase() + lower.slice(1);
-    }
-
     if (!isOpen) return null;
 
     // Minimized view
@@ -142,7 +230,7 @@ const CallModal = forwardRef(({
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{participant?.name}</p>
                             <p className="text-xs text-gray-300">
-                                {callStatus === 'connected' ? formatDuration(duration) : capitalizeFirstLetter(callStatus) }
+                                {callStatus === 'connected' ? formatDuration(duration) : callStatus }
                             </p>
                         </div>
                     </div>
@@ -180,10 +268,12 @@ const CallModal = forwardRef(({
                                 <video
                                     ref={remoteVideoRef}
                                     className="w-full h-full object-cover"
+                                    autoPlay
+                                    playsInline
                                 />
                             </div>
                             {/* Placeholder for demo */}
-                            {(callStatus === 'connected' || !isRemoteStreamReady) && (
+                            {(callStatus !== 'connected' || !isRemoteStreamReady) && (
                                 <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
                                     <div className="text-center text-white">
                                         <img
@@ -192,7 +282,7 @@ const CallModal = forwardRef(({
                                             className="w-40 h-40 rounded-full mx-auto mb-6 border-4 border-white shadow-lg"
                                         />
                                         <h2 className="text-2xl font-semibold mb-2">{participant?.name}</h2>
-                                        <p className="text-lg text-gray-300 capitalize">{capitalizeFirstLetter(callStatus)}</p>
+                                        <p className="text-lg text-gray-300 capitalize">{callStatus}...</p>
                                         {callStatus === 'calling' && (
                                             <div className="flex justify-center mt-6">
                                                 <div className="animate-pulse flex space-x-2">
@@ -226,10 +316,13 @@ const CallModal = forwardRef(({
                                             <p className="text-xs">Camera unavailable</p>
                                         </div>
                                     </div>
-                                ) : localVideoTrackId ? (
+                                ) : localStream ? (
                                     <video
                                         ref={localVideoRef}
                                         className="w-full h-full object-cover transform scale-x-[-1]"
+                                        autoPlay
+                                        muted
+                                        playsInline
                                     />
                                 ) : (
                                     <div className="absolute inset-0 bg-gradient-to-br from-green-600 to-blue-600 flex items-center justify-center">
@@ -244,8 +337,8 @@ const CallModal = forwardRef(({
                             </div>
                         )}
 
-                        {/* If Call Info Overlay */}
-                        {(callStatus === 'connected') && (
+                        {/* Call Info Overlay */}
+                        {(callStatus !== 'connected') && (
                             <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black via-black/50 to-transparent p-6">
                                 <div className="flex items-center justify-between text-white">
                                     <div className="flex items-center space-x-3">
@@ -257,7 +350,7 @@ const CallModal = forwardRef(({
                                         <div>
                                             <h3 className="text-lg font-semibold">{participant?.name}</h3>
                                             <p className="text-sm text-gray-300">
-                                                {callStatus === 'connected' ? formatDuration(duration) : `${capitalizeFirstLetter(callStatus)}`}
+                                                {callStatus === 'connected' ? formatDuration(duration) : `${callStatus}...`}
                                             </p>
                                         </div>
                                     </div>
@@ -299,7 +392,7 @@ const CallModal = forwardRef(({
                             {/* Call Info */}
                             <h2 className="text-3xl font-bold mb-2">{participant?.name}</h2>
                             <p className="text-xl text-white/80 mb-2">
-                                {callStatus === 'connected' ? formatDuration(duration) : `${capitalizeFirstLetter(callStatus)}`}
+                                {callStatus === 'connected' ? formatDuration(duration) : `${callStatus}...`}
                             </p>
 
                             {/* Call quality indicator */}
@@ -335,14 +428,14 @@ const CallModal = forwardRef(({
                         >
                             <Minimize2 className="w-6 h-6" />
                         </button>
-                        {/* {callType === 'voice' && callStatus === 'connected' && isRemoteStreamReady && (
+                        {callType === 'voice' && callStatus === 'connected' && isRemoteStreamReady && (
                             <audio
                                 ref={remoteAudioRef}
                                 autoPlay
                                 playsInline
                                 style={{ position: 'absolute', top: '-9999px', opacity: 0 }}
                             />
-                        )} */}
+                        )}
                     </div>
                 )}
 
@@ -376,6 +469,17 @@ const CallModal = forwardRef(({
                             ) : (
                                 // Active call controls
                                 <>
+                                    {callType === 'voice' && isAudioBlocked && (
+                                        <div className="absolute top-0 left-0 right-0 bg-yellow-600/90 text-white p-2 text-center z-10">
+                                            <p className="text-sm font-medium">
+                                                <button onClick={handleStartAudio} className="ml-3 px-3 py-1 bg-yellow-800 hover:bg-yellow-900 rounded-full text-xs font-bold transition-colors"
+                                                >
+                                                    START AUDIO
+                                                </button>
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {/* Mute */}
                                     <button
                                         onClick={onToggleMute}
@@ -390,7 +494,7 @@ const CallModal = forwardRef(({
                                     </button>
 
                                     {/* Video toggle (only for video calls) */}
-                                    {/* {callType === 'video' && (
+                                    {callType === 'video' && (
                                         <button
                                             onClick={onToggleVideo}
                                             className={`w-14 h-14 rounded-full flex items-center justify-center transition-all transform hover:scale-110 shadow-lg ${
@@ -403,10 +507,10 @@ const CallModal = forwardRef(({
                                         >
                                             {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
                                         </button>
-                                    )} */}
+                                    )}
 
                                     {/* Speaker toggle (only for voice calls) */}
-                                    {/* {callType === 'voice' && (
+                                    {callType === 'voice' && (
                                         <button
                                             onClick={onToggleSpeaker}
                                             className={`w-14 h-14 rounded-full flex items-center justify-center transition-all transform hover:scale-110 shadow-lg ${
@@ -418,10 +522,10 @@ const CallModal = forwardRef(({
                                         >
                                             {isSpeakerOn ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
                                         </button>
-                                    )} */}
+                                    )}
 
                                     {/* Additional controls */}
-                                    {/* <button
+                                    <button
                                         className="w-14 h-14 bg-gray-700 hover:bg-gray-600 text-white rounded-full flex items-center justify-center transition-all transform hover:scale-110 shadow-lg"
                                         title="Add participant"
                                     >
@@ -433,7 +537,7 @@ const CallModal = forwardRef(({
                                         title="Send message"
                                     >
                                         <MessageCircle className="w-6 h-6" />
-                                    </button> */}
+                                    </button>
 
                                     {/* End call */}
                                     <button

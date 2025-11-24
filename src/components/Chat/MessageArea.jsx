@@ -1,31 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {  ArrowLeft,  Phone,  Video,  MoreVertical,  Send,  Paperclip,  Mic,  Smile,  Image,  X,  Play } from 'lucide-react';
 import { fetchMessages, sendMessage, resetUnreadCount, addMessage, uploadFile, updateMessageStatus } from '../../store/slices/chatSlice';
-import {
-  initiateCall,
-  acceptCall,
-  declineCall,
-  endCall,
-  toggleMute,
-  toggleVideo,
-  toggleSpeaker,
-  toggleMinimize,
-  setShowControls,
-  setCameraLoading,
-  setCameraError,
-  incrementCallDuration,
-  setCallStatus, setPeerConnection, setLocalStream
-} from '../../store/slices/callSlice';
+import { initiateCall, setCallStatus, resetCallState, setLocalTracks } from '../../store/slices/callSlice.js';
 import { setSidebarOpen } from '../../store/slices/uiSlice';
 import { socketService } from '../../socket/socket.js';
-import { formatDistanceToNow } from 'date-fns';
 import MessageList from './MessageList';
 import EmojiPicker from './EmojiPicker';
 import FileUploadModal from './FileUploadModal';
 import MediaViewer from './MediaViewer';
 import VoiceRecorder from './VoiceRecorder';
-import CallModal from "./CallModal.jsx";
+import { agoraStore } from '../../lib/AgoraStore.js';
+// Unique ID তৈরি করার জন্য একটি ফাংশন
+const generateChannelId = (userAId, userBId) => {
+  // নিশ্চিত করুন যে channelId সবসময় একই থাকে, regardless of who calls whom.
+  // ছোট ID টি আগে রেখে স্ট্রিং তৈরি করা হলো।
+  const ids = [userAId, userBId].sort();
+  return `chat_channel_${ids[0]}_${ids[1]}`;
+};
 
 const MessageArea = () => {
   const dispatch = useDispatch();
@@ -51,8 +43,6 @@ const MessageArea = () => {
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
   const paperclipButtonRef = useRef(null);
-  const callTimerRef = useRef(null);
-  const callModalRef = useRef(null);
   const currentChat = chats.find(chat => chat.chatId === activeChat);
   const chatMessages = messages[activeChat] || [];
   const participant = currentChat?.type !== 'group'
@@ -60,8 +50,11 @@ const MessageArea = () => {
       : null;
   const isParticipantOnline = participant ? onlineUsers.includes(participant.id) : false;
 
-  const { activeCall,isCallModalOpen, callStatus, callType, callDuration, isMuted, isVideoEnabled, isSpeakerOn, isMinimized,
-    showControls, cameraError, isCameraLoading, remoteStreamReady, localStream } = useSelector((state) => state.call);
+  const { activeCall, callStatus, loading } = useSelector((state) => state.call);
+      
+  // যার সাথে কল করা হচ্ছে, তার ID
+  const participantId = participant?.id; // আপনার currentChat structure অনুযায়ী এটি পরিবর্তন করুন
+  const myUid = user?.id; // আপনার নিজের ID
 
   // Function to generate video thumbnail
   const generateVideoThumbnail = (videoFile, videoUrl) => {
@@ -195,25 +188,6 @@ const MessageArea = () => {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showFileUploadModal, showChatMenu]);
-
-  useEffect(() => {
-    // 1. যখন callStatus 'connected' হবে, তখন টাইমার শুরু করুন।
-    if (callStatus === 'connected') {
-      startCallTimer();
-    }
-    // 2. যখন callStatus 'ended' বা 'declined' হবে, তখন টাইমার বন্ধ করুন।
-    else if (callStatus === 'idle' || callStatus === 'ended' || callStatus === 'declined') {
-      stopCallTimer();
-    }
-
-    // cleanup function: কম্পোনেন্ট আনমাউন্ট হলে বা callStatus পরিবর্তন হলে টাইমার বন্ধ করবে
-    return () => {
-      if (callTimerRef.current) {
-        clearInterval(callTimerRef.current);
-        callTimerRef.current = null;
-      }
-    };
-  }, [callStatus]);
 
   const handleBackToContacts = () => {
     dispatch(setSidebarOpen(true));
@@ -498,101 +472,108 @@ const MessageArea = () => {
     setReplyingTo(null);
   };
 
-  const handleInitiateCall = async (type) => {
-    if (participant) {
-      try {
-        await dispatch(initiateCall({
-          participantId: participant.id,
-          callType: type
-        })).unwrap();
+  // ==========================================================
+  // 2. 📞 কল শুরু করার ফাংশন
+  // ==========================================================
+  const handleInitiateCall = useCallback(async (callType) => {    
+    
+    if (!participantId || loading) return;
 
-        // Start socket call
-        await  socketService.initiateCall(participant.id, type);
-      } catch (error) {
-        console.error('Failed to initiate call:', error);
-      }
-    }
-  };
+    // Channel ID তৈরি করা হলো
+    const channelId = generateChannelId(myUid, participantId);
 
-  const handleAcceptCall = async () => {
-    if (activeCall) {
-      try {
-        const callerId = activeCall.callerId
-        await dispatch(acceptCall(callerId)).unwrap();
-        await socketService.handleOffer(activeCall.callerId, activeCall.offer, activeCall.callType === 'video');
-        // startCallTimer();
-        setTimeout(() => {
-          if (callModalRef.current) {
-            console.log('Attempting manual play via ref...');
-            callModalRef.current.playRemoteStream();
-          } else {
-            console.error('CallModal Ref is null on accept!');
-          }
-        }, 50); // 50ms অপেক্ষা করুন DOM আপডেট হওয়ার জন্য
-      } catch (error) {
-        console.error('Failed to accept call:', error);
-      }
-    }
-  };
+    const caller = currentChat?.type !== 'group' ? currentChat?.participants?.find(p => p.id === user?.id) : null;
+    // Redux Thunk ডিসপ্যাচ
+    const resultAction = await dispatch(initiateCall({
+      participant,
+      caller,
+      callType, 
+      channelId,
+      activeChat
+    }));
 
-  const handleDeclineCall = async () => {
-    try {
-      await dispatch(declineCall(participant.id)).unwrap();
-      socketService.endCall(participant.id)
-    } catch (error) {
-      console.error('Failed to accept call:', error);
-    }
-  };
+    // থাঙ্কটি সফল হলে, Agora জয়েন লজিক এখানে শুরু হবে।
+    // Agora জয়েন লজিকটি আমরা useEffect এ রাখব (নিচে দেখুন),
+    // কারণ এটি activeCall স্টেটের উপর নির্ভর করে।
+    
+    // initiateCall.fulfilled এর পর activeCall সেট হয়ে যায়।
+    // activeCall-এ এখন channelId, token, callType সব আছে।
+  }, [dispatch, participantId, myUid, loading]);
 
-  const handleEndCall = async () => {
-    socketService.endCall(participant.id)
-    try {
-      await dispatch(endCall(participant.id)).unwrap();
-      socketService.endCall(participant.id)
-    } catch (error) {
-      console.error('Failed to accept call:', error);
-    }
-  };
-
-  const startCallTimer = () => {
-    callTimerRef.current = setInterval(() => {
-      dispatch(incrementCallDuration());
-    }, 1000);
-  };
-
-  const stopCallTimer = () => {
-    if (callTimerRef.current) {
-      clearInterval(callTimerRef.current);
-      callTimerRef.current = null;
-    }
-  };
-
-  const handleToggleMute = () => {
-    console.log('handleToggleMute')
-    dispatch(toggleMute());
-  };
-
-  const handleToggleVideo = () => {
-    console.log('handleToggleVideo')
-    dispatch(toggleVideo());
-  };
-
-  const handleToggleSpeaker = () => {
-    console.log('handleToggleSpeaker')
-    dispatch(toggleSpeaker());
-  };
-
-  const handleToggleMinimize = () => {
-    console.log('handleToggleMinimize')
-    dispatch(toggleMinimize());
-  };
-
-  // Cleanup call timer on unmount
+  // ==========================================================
+  // 3. 🌐 Agora জয়েনিং লজিক (useEffect)
+  // ==========================================================
   useEffect(() => {
+    let isCancelled = false;
+    
+    // যদি activeCall থাকে, কিন্তু এখনো connected না হয় (মানে 'calling' বা 'ringing')
+    // এবং এটি যদি আপনার দ্বারা শুরু করা call হয় (activeCall.callerId === myUid)
+    
+    if (activeCall && activeCall.callerId === myUid && callStatus === 'calling' && activeCall.token) {
+      const joinAgora = async () => {
+        try {
+
+          const existingClient = agoraStore.get('rtcClient');
+          if (existingClient) {
+            console.warn("Stale RTC Client found in store. Forcing cleanup before re-join.");
+            try {
+              // অ্যাসিঙ্ক্রোনাস leave কল করা
+              await existingClient.leave(); 
+            } catch (e) {
+              // leave ফেইল করলেও আমরা এগিয়ে যাব, কারণ উদ্দেশ্য হলো স্টোর পরিষ্কার করা।
+              console.log("Existing client leave failed (expected if already disconnected).");
+            }
+            agoraStore.clearAll();
+          }
+
+          // 1. Agora তে যুক্ত হোন এবং লোকাল ট্র্যাক পাবলিশ করুন
+          const localTracks = await socketService.startCallAndPublish(
+            activeCall.channelName, // channelId
+            myUid,               // UID (আপনার আইডি)
+            activeCall.token,    // Token
+            activeCall.callType
+          );
+
+          // if (isCancelled) return;
+
+          // localTracks[0] হল Audio Track (সবসময় থাকে)
+          const audioTrack = localTracks[0]; 
+          
+          // 2. লোকাল স্ট্রিম Redux-এ সংরক্ষণ করুন
+          // localTracks[1] হল video Track, localTracks[0] হল audio Track.
+          const videoTrack = activeCall.callType === 'video' ? localTracks[1] : null;
+          dispatch(setLocalTracks({ videoTrack, audioTrack }));
+          
+          // 3. কল স্ট্যাটাস 'connecting' বা 'connected' এ যেতে পারে
+          // 'calling' স্ট্যাটাস 'connected' এ পরিবর্তন হবে যখন প্রতিপক্ষ কল ধরবে (socket event)
+
+        } catch (error) {
+          if (isCancelled) return;
+          console.error("Agora Join Failed:", error);
+          // জয়েনিং ব্যর্থ হলে কল শেষ করুন
+          socketService.leaveCall();
+          dispatch(setCallStatus('failed')); 
+          
+          // সকেটের মাধ্যমে প্রতিপক্ষকে জানান যে কল ব্যর্থ হয়েছে
+          // socketService.sendCallFailed(activeCall.participantId, activeCall.id); 
+
+          // Redux স্টেট রিসেট করুন
+          setTimeout(() => dispatch(resetCallState()), 3000);
+        }
+      };
+      
+      joinAgora();
+    }
+
+    // Cleanup function: কম্পোনেন্ট আনমাউন্ট হলে বা activeCall পরিবর্তন হলে 
     return () => {
-      stopCallTimer();
+      isCancelled = true;
+      // এইখানে socketService.leaveCall() কল করবেন না। 
+      // কারণ কলটি CallModal-এর মাধ্যমে বা 'endCall' অ্যাকশনের মাধ্যমে শেষ হওয়া উচিত।
+      // তবে, যদি activeCall থাকা সত্ত্বেও MessageArea বন্ধ করা হয়, তাহলে লিক হতে পারে।
+      // এই কম্পোনেন্ট থেকে বের হলে CallModal বা CallHandler দায়িত্ব নেবে।
     };
-  }, []);
+  }, [activeCall, callStatus, myUid, dispatch]);
 
   const handleVoiceRecordStart = () => {
     setShowVoiceRecorder(true);
@@ -933,17 +914,17 @@ const MessageArea = () => {
 
               {(messageInput.trim() || uploadedFiles.length > 0) ? (
                   <button
-                      type="submit"
-                      className="p-3 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white rounded-full transition-colors"
+                    type="submit"
+                    className="p-3 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white rounded-full transition-colors"
                   >
                     <Send className="w-5 h-5" />
                   </button>
               ) : (
                   <button
-                      type="button"
-                      onClick={handleVoiceRecordStart}
-                      className="p-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full transition-colors"
-                      title="Record voice message"
+                    type="button"
+                    onClick={handleVoiceRecordStart}
+                    className="p-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full transition-colors"
+                    title="Record voice message"
                   >
                     <Mic className="w-5 h-5" />
                   </button>
@@ -953,53 +934,27 @@ const MessageArea = () => {
 
           {/* File Upload Modal */}
           <FileUploadModal
-              isOpen={showFileUploadModal}
-              onClose={() => setShowFileUploadModal(false)}
-              onFileSelect={handleFileSelect}
-              position={fileUploadPosition}
+            isOpen={showFileUploadModal}
+            onClose={() => setShowFileUploadModal(false)}
+            onFileSelect={handleFileSelect}
+            position={fileUploadPosition}
           />
 
           {/* Media Viewer */}
           <MediaViewer
-              isOpen={showMediaViewer}
-              onClose={() => setShowMediaViewer(false)}
-              files={mediaViewerFiles}
-              initialIndex={mediaViewerIndex}
+            isOpen={showMediaViewer}
+            onClose={() => setShowMediaViewer(false)}
+            files={mediaViewerFiles}
+            initialIndex={mediaViewerIndex}
           />
 
           {/* Voice Recorder */}
           <VoiceRecorder
-              isOpen={showVoiceRecorder}
-              onClose={() => setShowVoiceRecorder(false)}
-              onSend={handleVoiceSend}
+            isOpen={showVoiceRecorder}
+            onClose={() => setShowVoiceRecorder(false)}
+            onSend={handleVoiceSend}
           />
         </div>
-
-        {/* Call Modal */}
-        <CallModal
-            ref={callModalRef}
-            isOpen={isCallModalOpen}
-            activeCall={activeCall}
-            callType={callType}
-            participant={participant}
-            callStatus={callStatus}
-            duration={callDuration}
-            onAccept={handleAcceptCall}
-            onDecline={handleDeclineCall}
-            onClose={handleEndCall}
-            onToggleMute={handleToggleMute}
-            onToggleVideo={handleToggleVideo}
-            onToggleSpeaker={handleToggleSpeaker}
-            onToggleMinimize={handleToggleMinimize}
-            isMuted={isMuted}
-            isVideoEnabled={isVideoEnabled}
-            isSpeakerOn={isSpeakerOn}
-            isMinimized={isMinimized}
-            cameraError={cameraError}
-            isCameraLoading={isCameraLoading}
-            isRemoteStreamReady = {remoteStreamReady}
-            localStream = {localStream}
-        />
       </>
   );
 };

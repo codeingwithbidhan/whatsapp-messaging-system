@@ -37,6 +37,7 @@ function AppRoutes() {
         if (storedToken && user && isAuthenticated) {
             if (!socketService.socket) {
                 socketService.connect(user.id, storedToken);
+                // socketService.initAgoraClient(); 
             }
         }
 

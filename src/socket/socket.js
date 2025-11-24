@@ -1,11 +1,13 @@
 // src/services/socket.js
 import { io } from "socket.io-client";
+import AgoraRTC from 'agora-rtc-sdk-ng';
 import store from '../store/store';
 import { setOnlineUsers, receiveNewMessage, updateMessageStatus, setTyping } from '../store/slices/chatSlice';
 import { toast } from 'react-hot-toast';
 import {
     receiveIncomingCall,
     setCallStatus,
+    endCall,
     handleWebRTCOffer,
     handleWebRTCAnswer,
     handleICECandidate,
@@ -15,7 +17,8 @@ import {
     setPeerConnection,
     setRemoteStream,
     setRemoteStreamReady,
-    resetCallState, setLocalStream
+    resetCallState, setLocalStream,
+    setRemoteTracks
 } from '../store/slices/callSlice';
 import { getTurnCredentials } from '../api/auth';
 
@@ -23,12 +26,23 @@ import { getTurnCredentials } from '../api/auth';
 const BASE_API_URL = import.meta.env.VITE_API_BASE || "https://chatbd.live/api";
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
+
+// Agora State Management
+const APP_ID="cd227da9d01d405c9d34a2cf6452c6e8"; // 💡 আপনার নিজের Agora App ID এখানে দিন
+const LOG_LEVEL = "info";
+let agoraClient = null;
+let localTracks = [];
+let remoteUsers = {}; // দূরবর্তী ব্যবহারকারীদের ট্র্যাক করার জন্য
+
 class SocketService {
     constructor() {
         this.socket = null;
-        this.peerConnection = null;
         this.localStream = null;
+
+        this.peerConnection = null;
         this.remoteStream = null;
+
+        this.isMuted = false;
     }
 
     async getIceServerConfig() {
@@ -95,59 +109,54 @@ class SocketService {
             store.dispatch(setTyping({ chatId, senderId, typing }));
         });
 
-        // Incoming call
-        this.socket.on('callInitiated', (data) => {
-            store.dispatch(receiveIncomingCall(data));
-            this.socket.emit('callRinging', { callerId: data.callerId })
-            // this.handleOffer(data.callerId, data.offer, data.callType === 'video')
+
+        // Agora call start.
+        this.socket.on('incomingCall', (data) => {
+            store.dispatch(receiveIncomingCall({
+                channelName: data.channelName,
+                callerId: data.callerId,
+                callerName: data.callerName,
+                callType: data.callType,
+                token: data.token, // কলারের টোকেন
+                chatId: data.chatId,
+                participant: data.caller,
+                status: 'Ringing',
+            }));
         });
 
-        // Caller side
-        this.socket.on('callRinging', () => {
-            console.log('call ringing');
-            store.dispatch(setCallStatus('ringing'));
-        });
-        // ধরে নিন: এই কোডটি আপনার ক্লাসের ইনস্ট্যান্স তৈরি হওয়ার পর রান করছে।
-        // socketService হলো আপনার WebRTCSocketService ক্লাসের ইনস্ট্যান্স।
+        this.socket.on('callDeclinedOrEnd', (data) => {
+            // const status = data.type === 'declined' ? `declined` : 'Call ended';
+            store.dispatch(setCallStatus(status));
 
-        this.socket.on('webrtcAnswer', async (data) => {
-            console.log('Received WebRTC Answer:', data);
-
-            // ১. নিশ্চিত করা যে PeerConnection তৈরি আছে
-            if (!this.peerConnection) {
-                console.error('PeerConnection not established for receiving answer.');
-                return;
-            }
-
-            // ২. Answer-টিকে রিমোট ডেসক্রিপশন হিসেবে সেট করা
-            try {
-                await this.peerConnection.setRemoteDescription(data.answer);
-                // ৩. কল সফলভাবে সেটআপ হলে স্ট্যাটাস আপডেট করা
-                // store.dispatch(setCallStatus('connected'));
-                console.log('WebRTC connection established! Waiting for ICE candidates to complete.');
-            } catch (error) {
-                console.error('Error setting remote description (Answer):', error);
-                // store.dispatch(setCallError('Failed to finalize call setup.'));
-            }
+            setTimeout( async () => {
+                await this.destroyAndCleanup();
+                store.dispatch(resetCallState());
+            }, 2000);
         });
 
-
-        this.socket.on('iceCandidate', async ({ from, candidate }) => {
-            // যখন সকেটে একটি ICE Candidate মেসেজ আসে, তখন এই ফাংশনটি কল করা হয়।
-            await this.handleIceCandidate(candidate);
+        
+        // 5. কলারের জন্য কল কানেক্টেড নিশ্চিতকরণ
+        this.socket.on('callConnected', (data) => {
+            console.log('Call established successfully:', data);
+            
+            // Redux-এ কল স্ট্যাটাস 'connected' এ পরিবর্তন করা হলো
+            store.dispatch(setCallStatus('connected'));
+            
+            // 💡 ঐচ্ছিকভাবে, আপনি এখানে একটি নোটিফিকেশন দেখাতে পারেন যে কল সফল হয়েছে।
+            // data.participantId বা data.channelName ব্যবহার করে আপনি নিশ্চিত করতে পারেন।
         });
 
-        // Call ended
-        this.socket.on('callEnded', () => {
-            if (this.peerConnection) {
-                this.peerConnection.close();
-                this.peerConnection = null;
+        // ===========================================
+        // B. কলারের জন্য: অফলাইন স্ট্যাটাস শোনা ('callStatusUpdate')
+        // ===========================================
+        this.socket.on('callStatusUpdate', (data) => {
+            store.dispatch(setCallStatus(data.status));
+            if (data.status === 'offline') {
+                setTimeout( async () => {
+                    await this.destroyAndCleanup();
+                    store.dispatch(resetCallState());
+                }, 2000);
             }
-            if (this.localStream) {
-                this.localStream.getTracks().forEach(track => track.stop());
-                this.localStream = null;
-            }
-            store.dispatch(resetCallState());
         });
 
     }
@@ -157,6 +166,10 @@ class SocketService {
             this.socket = null;
         }
     }
+
+    // ===========================
+    // Messaging
+    // ===========================
 
     sendMessage(chatId, message) {
         this.socket?.emit('sendMessage', { chatId, message });
@@ -175,12 +188,10 @@ class SocketService {
         this.socket?.emit('stopTyping', chatId, senderId, receiverIds);
     }
 
-    // UI-এর জন্য Getter
-    getRemoteStream() {
-        return this.remoteStream;
-    }
+    // ===========================
+    // Media
+    // ===========================
 
-    // লোকাল ক্যামেরা ও মাইক্রোফোন থেকে stream নেওয়া
     async initLocalStream(video = true) {
         try {
             if (!this.localStream) { // ডুপ্লিকেট অ্যাক্সেস এড়াতে
@@ -196,130 +207,231 @@ class SocketService {
         }
     }
 
-    // ডুপ্লিকেশন এড়াতে সাধারণ WebRTC সেটআপ লজিক
-    async _setupPeerConnection(isCaller, participantId) {
-        const dynamicConfig = await this.getIceServerConfig();
-        this.peerConnection = new RTCPeerConnection(dynamicConfig);
-        this.remoteStream = new MediaStream();
+    agoraCallRequest (callData) {
+        if (this.socket) {
+            this.socket.emit('agoraCallRequest', callData, (response) => {
+                // সার্ভার থেকে প্রাপ্ত Acknowledgement (ঐচ্ছিক)
+                if (response && response.success) {
+                } else if (response && response.error) {
+                    console.error("Server reported an error during call request:", response.error);
+                }
+            });
+        } else {
+            console.error("Socket not connected. Cannot send call request.");
+        }
+    }
 
-        // লোকাল ট্র্যাক যোগ করা
-        this.localStream.getTracks().forEach((track) => {
-            if (!track.enabled) {
-                track.enabled = true;
-                console.warn("Local audio track was disabled, enabling now.");
+    /**
+    * চ্যানেল জয়েন করা এবং লোকাল স্ট্রিম পাবলিশ করা।
+    * এটি আপনার useEffect লজিক থেকে কল করা হবে।
+    * @returns { Promise<AgoraRTCTrack[]> } লোকাল ট্র্যাক অ্যারে রিটার্ন করে।
+    */
+    async startCallAndPublish (channelId, uid, token, callType) {
+
+        // CRITICAL FIX: নতুন করে জয়েন করার আগে পুরাতন ক্লায়েন্টকে সম্পূর্ণভাবে ধ্বংস ও ক্লিনআপ করুন।
+        await this.destroyAndCleanup();
+
+        // ১. নতুন Agora ক্লায়েন্ট ইনস্ট্যান্স তৈরি করা (সিঙ্গলটন বাতিল)
+        agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        // console.log("A fresh Agora client initialized for new call.");
+
+        // ২. নতুন ক্লায়েন্টে ইভেন্ট লিসেনার যুক্ত করা
+        agoraClient.on("user-published", this.handleUserPublished.bind(this));
+        agoraClient.on("user-unpublished", this.handleUserUnpublished.bind(this));
+        agoraClient.on("user-joined", this.handleUserJoined.bind(this));
+        agoraClient.on("user-left", this.handleUserLeft.bind(this));
+        
+        // পুরানো ট্র্যাকগুলো বন্ধ ও পরিষ্কার করা (যদিও destroyAndCleanup এ করা হয়েছে, আবার চেক করা নিরাপদ)
+        localTracks.forEach(track => track.close());
+        localTracks = [];
+        const tracksPromises = [];
+        
+        // **ধাপ ১: অডিও ট্র্যাক তৈরি**
+        tracksPromises.push(AgoraRTC.createMicrophoneAudioTrack());
+
+        // **ধাপ ২: ভিডিও ট্র্যাক তৈরি (শুধুমাত্র ভিডিও কলের জন্য)**
+        if (callType === 'video') {
+            try {
+                const videoTrack = await AgoraRTC.createCameraVideoTrack();
+                tracksPromises.push(Promise.resolve(videoTrack));
+                console.log("Camera video track created successfully.");
+            } catch (error) {
+                // ক্যামেরা এক্সেস না পেলে অডিও দিয়ে চালিয়ে যাওয়া
+                console.error("Camera access denied or device in use. Continuing with audio only.", error);
             }
-            console.log('local track asche =>', track)
-            this.peerConnection.addTrack(track, this.localStream);
+        }
+
+        // **ধাপ ৩: সমস্ত সফল ট্র্যাকের জন্য অপেক্ষা করা**
+        const tracksResults = await Promise.allSettled(tracksPromises);
+
+        localTracks = tracksResults
+            .filter(result => result.status === 'fulfilled' && result.value)
+            .map(result => result.value);
+        
+        if (localTracks.length === 0) {
+            // যদি কোনো ট্র্যাকই তৈরি না হয় (যেমন মাইক্রোফোনও না পায়)
+            await this.destroyAndCleanup();
+            throw new Error("Failed to create any local tracks. Check microphone/camera access.");
+        }
+
+        // ৪. চ্যানেলে জয়েন করা
+        const numericUid = String(uid); 
+        await agoraClient.join(APP_ID, channelId, token, numericUid);
+        
+        console.log(`Successfully joined channel ${channelId} with UID ${uid}`);
+
+        // ৫. লোকাল ট্র্যাক পাবলিশ করা
+        await agoraClient.publish(localTracks);
+        
+        // console.log("Local tracks published:", localTracks.map(t => t.trackMediaType));
+        
+        return localTracks;
+    }
+
+    // ==========================================================
+    // ৪. leaveCall ফাংশন (Call End লজিকের জন্য)
+    // ==========================================================
+    // এই ফাংশনটি আপনার declineCallThunk বা endCall অ্যাকশনে কল করা উচিত
+    async leaveCall() {
+        console.log("Initiating call leave sequence.");
+        await this.destroyAndCleanup();
+        console.log("Call resources successfully cleaned up.");
+        // Redux state update (যদি প্রয়োজন হয়)
+    }    
+
+    async declineOrEndCall(callerId, participantName, type) {  
+        if (this.socket) {
+            this.socket.emit('callDeclinedOrEnd', { callerId: callerId, participantName: participantName, type: type });
+        }   
+        await this.destroyAndCleanup();
+    };
+
+    async endCall(receiverId) {
+        // ১. অন্য ব্যবহারকারীকে কল শেষ হওয়ার সিগনালিং পাঠানো
+        if (this.socket) {
+            this.socket.emit('callEnd', { receiverId }); 
+        }
+        
+        // ২. লোকাল মিডিয়া রিসোর্স পরিষ্কার করা
+        await this.destroyAndCleanup();
+        console.log("Local call media resources successfully cleaned up.");
+    }
+
+    answerCall(callerId, receiverId, channelName) {
+        this.socket.emit('agoraCallAnswer', {
+            callerId: callerId,
+            receiverId: receiverId,
+            channelName: channelName
         });
-
-        // ontrack হ্যান্ডলার সেট করা
-        this.peerConnection.ontrack = (event) => {
-            if (event.streams && event.streams[0]) {
-                console.log('stream asche => ', event.streams[0])
-                // ১. socketService-এর remoteStream property আপডেট করুন
-                this.remoteStream = event.streams[0];
-            }
-            // ২. Redux-এ ডিসপ্যাচ করে UI-কে জানান যে রিমোট স্ট্রিম ব্যবহারের জন্য প্রস্তুত
-            store.dispatch(setRemoteStreamReady(true));
-        };
-
-        // ICE candidate হ্যান্ডলার সেট করা
-        this.peerConnection.onicecandidate = (event) => {
-            if (event.candidate) {
-                console.log('onicecandidate call hoyche => ', event.candidate)
-                this.socket.emit('iceCandidate', {
-                    to: participantId,
-                    callerId: isCaller ? store.getState().auth.user?.id : null,
-                    candidate: event.candidate,
-                });
-            }
-        };
-
-        // 💡 নতুন সংযোজন: ICE সংযোগের অবস্থার পরিবর্তন পর্যবেক্ষণ
-        this.peerConnection.oniceconnectionstatechange = () => {
-            const currentState = this.peerConnection.iceConnectionState;
-            console.log('ICE Connection State Changed:', currentState);
-
-            // 'connected' বা 'completed' মানেই P2P সংযোগ তৈরি
-            if (currentState === 'connected' || currentState === 'completed') {
-                store.dispatch(setCallStatus('connected'));
-                console.log('ICE: Connection Successful. Call status set to connected.');
-
-            } else if (currentState === 'failed') {
-                // সংযোগ বিচ্ছিন্ন হলে বা ব্যর্থ হলে
-                console.error('ICE Connection Failed! Ending call.');
-                this.endCall(participantId);
-            }
-        };
     }
 
-    async initiateCall(receiverId, callType = 'video') {
+    // ===========================
+    // Toggle Audio/Video
+    // ===========================
+    async toggleAudio() {
+        
+        const audioTrack = localTracks.find(t => t.trackMediaType === 'audio');
+
+        if (!audioTrack) {
+            console.error("Local audio track not found. Cannot toggle mute.");
+            return;
+        }
+
         try {
-            store.dispatch(setCallStatus('calling')); // কল স্ট্যাটাস আপডেট হলো
-            const videoEnabled = callType === 'video';
-            console.log('videoEnabled', videoEnabled)
-            await this.initLocalStream(videoEnabled);
-            await this._setupPeerConnection(true, receiverId);
-
-            // Caller একটা Offer তৈরি করবে
-            const offer = await this.peerConnection.createOffer();
-            await this.peerConnection.setLocalDescription(offer);
-
-            // সার্ভারে কল ইভেন্ট পাঠানো হলো
-            this.socket.emit('callInitiated', {
-                receiverId: receiverId,
-                callerId: store.getState().auth.user?.id,
-                callType,
-                offer,
-            });
+            // ১. ইনস্ট্যান্সের স্ট্যাটাস টগল করুন (isMuted = !isMuted এর সমতুল্য)
+            this.isMuted = !this.isMuted;
+            
+            // ২. নতুন স্ট্যাটাস localAudioTrack-এ প্রয়োগ করুন।
+            // setEnabled(true) মানে আনমিউট (isMuted: false)
+            // setEnabled(false) মানে মিউট (isMuted: true)
+            // তাই, this.isMuted এর উল্টো ভ্যালু setEnabled-এ পাঠান: !this.isMuted
+            await audioTrack.setEnabled(!this.isMuted);
 
         } catch (error) {
-            console.log('error', error)
-        }
-    }
-    async handleOffer(callerId, offer, isVideoCall = true) {
-        try {
-            await this.initLocalStream(isVideoCall);
-            await this._setupPeerConnection(false, callerId); // নতুন হেল্পার মেথড ব্যবহার
-            await this.peerConnection.setRemoteDescription(offer);
-            const answer = await this.peerConnection.createAnswer();
-            await this.peerConnection.setLocalDescription(answer);
-            this.socket.emit('webrtcAnswer', {
-                callerId: callerId,
-                answer,
-            });
-            store.dispatch(setCallStatus('connecting'));
-        } catch (error) {
-            console.error('Failed to handle offer:', error);
-            // store.dispatch(setCallError('Failed to connect call.'));
+            console.error("Error toggling mute status:", error);
         }
     }
 
-    // ৩. ICE Candidate যোগ করা
-    async handleIceCandidate(candidate) {
-        try {
-            if (this.peerConnection && candidate) {
-                console.log('this.peerConnection && candidate =>', this.peerConnection && candidate)
-                await this.peerConnection.addIceCandidate(candidate);
+    toggleVideo(off) {
+        const videoTrack = localTracks.find(t => t.hasVideo);
+        if (videoTrack) {
+            videoTrack.setEnabled(!off);
+            return !off;
+        }
+        return false;
+    }
+
+    /**
+     * কল ছেড়ে দেওয়া এবং ট্র্যাক বন্ধ করা।
+     */
+    async leaveCall() {
+        if (!agoraClient) return;
+
+        localTracks.forEach(track => track.close());
+        localTracks = [];
+        
+        await agoraClient.leave();
+        console.log("Successfully left the channel.");
+    }
+
+
+    // ===========================
+    // Agora Events
+    // ===========================
+
+    async destroyAndCleanup() {
+        if (agoraClient) {
+            console.log("Cleaning up and destroying existing Agora client...");
+            try {
+                // ১. ক্লায়েন্টকে চ্যানেল ত্যাগ করতে বাধ্য করা
+                await agoraClient.leave(); 
+            } catch (e) {
+                console.log("Error during client.leave, likely already left or stuck. Proceeding with track cleanup.");
             }
-        } catch (error) {
-            console.error('Error adding received ICE candidate:', error);
+            
+            // ২. লোকাল ট্র্যাক বন্ধ করা
+            localTracks.forEach(track => track.close());
+            localTracks = [];
+            
+            // ৩. রিমোট ইউজার এবং গ্লোবাল ক্লায়েন্ট রেফারেন্স মুছে ফেলা
+            Object.keys(remoteUsers).forEach(key => delete remoteUsers[key]);
+            agoraClient = null; // গ্লোবাল রেফারেন্স সাফ করা
+            
+            // ৪. Redux স্টেট পরিষ্কার করা (আপনার Redux লজিক অনুযায়ী)
+            // store.dispatch(resetAgoraState()); // যদি আপনার এমন কোনো অ্যাকশন থাকে
         }
     }
-    endCall(toUserId) {
-        if (this.peerConnection) {
-            this.peerConnection.close();
-            this.peerConnection = null;
+
+    async handleUserPublished(user, mediaType) {
+        console.log('handleUserPublished=>', user, mediaType);
+        
+        await agoraClient.subscribe(user, mediaType);
+
+        if (mediaType === "video") {
+            console.log(`Remote video published by ${user.uid}.`);
+            store.dispatch(setRemoteTracks({ videoTrack: user.videoTrack }));
         }
-        if (this.localStream) {
-            this.localStream.getTracks().forEach(track => track.stop());
-            this.localStream = null;
+
+        if (mediaType === "audio") {
+            user.audioTrack.play();
+            console.log(`Remote audio published by ${user.uid}.`);
+
         }
-        store.dispatch(setLocalStream(null));
-        store.dispatch(resetCallState());
-        // UI এবং রিসিভারকে জানানোর জন্য
-        this.socket?.emit('callEnded', toUserId);
-        // store.dispatch(resetCallState());
+
+        remoteUsers[user.uid] = user;
+    }
+
+    handleUserUnpublished(user) {
+        delete remoteUsers[user.uid];
+    }
+
+    handleUserJoined(user) {
+        console.log("User joined:", user.uid);
+    }
+
+    handleUserLeft(user) {
+        console.log("User left:", user.uid);
+        delete remoteUsers[user.uid];
     }
 }
 export const socketService = new SocketService();
