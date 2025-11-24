@@ -68,25 +68,6 @@ const Chat = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [dispatch, activeChat]);
 
-  // Mobile view logic
-  const isMobile = window.innerWidth < 768;
-  
-  if (isMobile) {
-    return (
-      <div className="h-screen bg-gray-100 flex overflow-hidden">
-        {/* Mobile: Show either sidebar or message area, not both */}
-        {!activeChat || sidebarOpen ? (
-          <div className="w-full">
-            <Sidebar />
-          </div>
-        ) : (
-          <div className="w-full">
-            <MessageArea />
-          </div>
-        )}
-      </div>
-    );
-  }
   useEffect(() => {
 
     const playRinging = () => {
@@ -262,7 +243,53 @@ const Chat = () => {
     console.log('handleToggleMinimize')
     dispatch(toggleMinimize());
   };
-
+// Mobile view logic
+  const isMobile = window.innerWidth < 768;
+  const renderCallModal = () => (
+    <CallModal
+      ref={callModalRef}
+      isOpen={isCallModalOpen}
+      activeCall={activeCall}
+      callType={callType}
+      participant={participant}
+      callStatus={callStatus}
+      duration={callDuration}
+      onAccept={handleAcceptCall}
+      onDecline={handleDeclineCall}
+      onClose={handleEndCall}
+      onToggleMute={handleToggleMute}
+      onToggleVideo={handleToggleVideo}
+      onToggleSpeaker={handleToggleSpeaker}
+      onToggleMinimize={handleToggleMinimize}
+      isMuted={isMuted}
+      isVideoEnabled={isVideoEnabled}
+      isSpeakerOn={isSpeakerOn}
+      isMinimized={isMinimized}
+      cameraError={cameraError}
+      isCameraLoading={isCameraLoading}
+      isRemoteStreamReady = {remoteStreamReady}
+      localStream = {localStream}
+      localVideoTrackId = {localVideoTrackId}
+      remoteVideoTrackId = {remoteVideoTrackId}
+    />
+  );  
+  if (isMobile) {
+    return (
+      <div className="h-screen bg-gray-100 flex overflow-hidden">
+        {/* Mobile: Show either sidebar or message area, not both */}
+        {!activeChat || sidebarOpen ? (
+          <div className="w-full">
+            <Sidebar />
+          </div>
+        ) : (
+          <div className="w-full">
+            <MessageArea />
+          </div>
+        )}
+        {renderCallModal()}
+      </div>
+    );
+  }
   // Desktop view (original layout)
   return (
     <div className="h-screen bg-gray-100 flex overflow-hidden">
@@ -301,34 +328,8 @@ const Chat = () => {
             </div>
           </div>
         )}
-        {/* Call Modal */}
-        <CallModal
-          ref={callModalRef}
-          isOpen={isCallModalOpen}
-          activeCall={activeCall}
-          callType={callType}
-          participant={participant}
-          callStatus={callStatus}
-          duration={callDuration}
-          onAccept={handleAcceptCall}
-          onDecline={handleDeclineCall}
-          onClose={handleEndCall}
-          onToggleMute={handleToggleMute}
-          onToggleVideo={handleToggleVideo}
-          onToggleSpeaker={handleToggleSpeaker}
-          onToggleMinimize={handleToggleMinimize}
-          isMuted={isMuted}
-          isVideoEnabled={isVideoEnabled}
-          isSpeakerOn={isSpeakerOn}
-          isMinimized={isMinimized}
-          cameraError={cameraError}
-          isCameraLoading={isCameraLoading}
-          isRemoteStreamReady = {remoteStreamReady}
-          localStream = {localStream}
-          localVideoTrackId = {localVideoTrackId}
-          remoteVideoTrackId = {remoteVideoTrackId}
-        />
       </div>
+        {renderCallModal()}
     </div>
   );
 };
