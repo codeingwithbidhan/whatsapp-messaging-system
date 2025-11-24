@@ -64,7 +64,7 @@ const EmojiPicker = ({ onEmojiSelect }) => {
       </div>
 
       {/* Category Label */}
-      <div className="px-4 pb-3">
+      <div className="px-4 pb-2">
         <p className="text-sm font-medium text-gray-600 text-center">
           {activeCategory}
         </p>

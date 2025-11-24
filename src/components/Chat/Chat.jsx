@@ -6,8 +6,8 @@ import { fetchChats } from '../../store/slices/chatSlice';
 import { setSidebarOpen } from '../../store/slices/uiSlice';
 import { socketService } from '../../socket/socket.js';
 import CallModal from "./CallModal.jsx";
-import busyTone from '../../sound/busy.mp3';
-import ringingTone from '../../sound/ringing.mp3';
+import busyTone from '../../sound/callbusy.mp3';
+import ringingTone from '../../sound/callringing.mp3';
 
 import {
   acceptCall,
