@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import * as chatAPI from '../../api/chat.js';
+import socketService from '../../socket/socket.js';
 
 // -----------------------------------------------------------
 // NEW ASYNC THUNK: Search Users (আপনার কোড থেকে নেওয়া)
@@ -256,7 +257,7 @@ const chatSlice = createSlice({
         
         chat.lastMessage = {
           id: message.id,
-          message: message.message,
+          message: message.message ?? message.file_name,
           created_at: message.created_at,
           status: message.status,
         };
@@ -297,24 +298,23 @@ const chatSlice = createSlice({
     },
     // 1. নতুন অ্যাকশন: মেসেজের স্ট্যাটাস আপডেট করার জন্য
     updateMessageStatus: (state, action) => {
-      const { messageId, status } = action.payload;
+      const { messageId, status } = action.payload;    
 
       for (const chatId in state.messages) {
         if (state.messages.hasOwnProperty(chatId)) { // ভালো অভ্যাস
           const messageArray = state.messages[chatId];
           
           const messageIndex = messageArray.findIndex(
-            (msg) => String(msg.id) === String(messageId) // ⬅️ নিরাপদ তুলনা
-          );
+            (msg) => String(msg.id) === String(messageId)
+          );          
 
-          if (messageIndex !== -1) {
+          if (messageIndex !== -1 && messageArray[messageIndex].status !== 'seen') {
             messageArray[messageIndex].status = status;
             const chat = state.chats.find(c => String(c.chatId) === String(chatId)); // chat ID তুলনাও নিরাপদ
-            if (chat && String(chat.lastMessage?.id) === String(messageId)) { // ⬅️ নিরাপদ তুলনা
+            if (chat && String(chat.lastMessage?.id) === String(messageId)) {
               chat.lastMessage.status = status;
             }
-            console.log('last message =>', chat);
-            return; 
+            return;
           }
         }
       }
@@ -394,6 +394,12 @@ const chatSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchChats.fulfilled, (state, action) => {
+        action.payload.forEach((chat) => {
+          if (chat.notifySendersDeliveredMessage.sender_id) {
+            console.log('notifySendersDeliveredMessage form',  chat.notifySendersDeliveredMessage );
+            socketService.makeAsDelivery({ chatId: chat.chatId, notifySendersDeliveredMessage: chat.notifySendersDeliveredMessage });
+          }
+        });
         state.loading = false;
         state.chats = action.payload;
         state.error = null;

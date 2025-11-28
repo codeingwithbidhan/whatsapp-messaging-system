@@ -64,7 +64,7 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
       case 'sent':
         return <Check className="w-2 h-2 text-gray-400" />;
       case 'delivered':
-        return <CheckCheck className="w-2 h-2 text-gray-400" />;
+        return <CheckCheck className="w-3 h-3 text-gray-400" />;
       case 'seen':
         return <CheckCheck className="w-3 h-3 text-green-500" />;
       default:
@@ -257,15 +257,6 @@ const MessageList = forwardRef(({ messages, currentUserId, onReply, onMediaClick
       return;
     }
 
-    // Show sticky header when scrolling up from bottom
-    // if (scrollTop > 100) {
-    //   setShowStickyHeader(true);
-    // } else {
-    //   setShowStickyHeader(false);
-    //   return;
-    // }
-
-    // Find which date section is currently at the top of the viewport
     let currentVisibleDate = '';
     let minDistance = Infinity;
     

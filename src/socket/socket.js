@@ -101,6 +101,7 @@ class SocketService {
 
         // Listen message status updates
         this.socket.on('messageStatus', ({ messageId, status }) => {
+            console.log('message Ids, status after delivery', messageId, status);
             store.dispatch(updateMessageStatus({ messageId, status }));
         });
 
@@ -108,7 +109,6 @@ class SocketService {
         this.socket.on('typing', ({ chatId, senderId, typing }) => {
             store.dispatch(setTyping({ chatId, senderId, typing }));
         });
-
 
         // Agora call start.
         this.socket.on('incomingCall', (data) => {
@@ -175,7 +175,13 @@ class SocketService {
         this.socket?.emit('sendMessage', { chatId, message });
     }
 
+    makeAsDelivery({chatId, notifySendersDeliveredMessage}) {
+        console.log('notifySendersDeliveredMessage form socket', notifySendersDeliveredMessage);
+        this.socket?.emit('makeAsDelivered', { chatId, notifySendersDeliveredMessage });
+    }
+
     markAsSeen(chatId, viewerId, notifyReceiverIds) {
+        console.log('chatId viewerId notifyReceiverIds', chatId, viewerId, notifyReceiverIds);
         this.socket?.emit('markAsSeen', { chatId, viewerId, notifyReceiverIds });
     }
 

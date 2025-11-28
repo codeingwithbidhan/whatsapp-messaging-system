@@ -27,13 +27,12 @@ const Chat = () => {
   const { sidebarOpen } = useSelector((state) => state.ui);
   const { activeChat } = useSelector((state) => state.chat);
 
-
   const callModalRef = useRef(null);
   const callTimerRef = useRef(null);
 
+  const isFetchedRef = useRef(false);
   const ringingAudioRef = useRef(null);
   const busyAudioRef = useRef(null);
-
 
   const myUid = useSelector((state) => state.auth?.user?.id || state.auth?.userId || null);
   const { user } = useSelector((state) => state.auth);
@@ -41,16 +40,38 @@ const Chat = () => {
   const { activeCall,isCallModalOpen, callStatus, callType, callDuration, isMuted, isVideoEnabled, isSpeakerOn, isMinimized,
   showControls, cameraError, isCameraLoading, remoteStreamReady, localStream, loading, participant,localVideoTrackId, remoteVideoTrackId } = useSelector((state) => state.call);
 
-  useEffect(() => {
-    dispatch(fetchChats());
+  // useEffect(() => {
+  //   dispatch(fetchChats());
     
+  //   ringingAudioRef.current = new Audio(ringingTone);
+  //   ringingAudioRef.current.loop = true;
+
+  //   busyAudioRef.current = new Audio(busyTone);
+  //   busyAudioRef.current.loop = false;
+    
+  // }, [dispatch]);
+
+  useEffect(() => {
+    if (!isFetchedRef.current) {
+      dispatch(fetchChats());
+      isFetchedRef.current = true;
+    }
+  }, [dispatch]);
+
+  // Effect 2: অডিও সেটআপ করার জন্য (একবারই চলবে)
+  useEffect(() => {
     ringingAudioRef.current = new Audio(ringingTone);
     ringingAudioRef.current.loop = true;
 
     busyAudioRef.current = new Audio(busyTone);
     busyAudioRef.current.loop = false;
-    
-  }, [dispatch]);
+
+    // ক্লিনআপ (অপশনাল কিন্তু ভালো প্র্যাকটিস)
+    return () => {
+      ringingAudioRef.current = null;
+      busyAudioRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -128,9 +149,7 @@ const Chat = () => {
 
 
   const handleAcceptCall = async () => {
-
     if (activeCall) {
-
       // 1. Redux স্টেট আপডেট করুন
       dispatch(acceptCall(activeCall.callerId));
       
@@ -163,32 +182,12 @@ const Chat = () => {
 
       } catch (error) {
         console.error("Failed to join Agora as Receiver:", error);
-        // ব্যর্থ হলে কল শেষ করার লজিক
         socketService.leaveCall();
-        // ... অন্যান্য রিসেট লজিক ...
       }
-
-      // try {
-      //   const callerId = activeCall.callerId
-      //   await dispatch(acceptCall(callerId)).unwrap();
-      //   await socketService.handleOffer(activeCall.callerId, activeCall.offer, activeCall.callType === 'video');
-      //   // startCallTimer();
-      //   setTimeout(() => {
-      //     if (callModalRef.current) {
-      //       console.log('Attempting manual play via ref...');
-      //       callModalRef.current.playRemoteStream();
-      //     } else {
-      //       console.error('CallModal Ref is null on accept!');
-      //     }
-      //   }, 50); // 50ms অপেক্ষা করুন DOM আপডেট হওয়ার জন্য
-      // } catch (error) {
-      //   console.error('Failed to accept call:', error);
-      // }
     }
   };
 
   const handleDeclineCall = async () => {
-    console.log('active call handleEndCall', activeCall);
     try {
       dispatch(resetCallState());
       const type='declined';
@@ -230,20 +229,17 @@ const Chat = () => {
   };
 
   const handleToggleVideo = () => {
-    console.log('handleToggleVideo')
     dispatch(toggleVideo());
   };
 
   const handleToggleSpeaker = () => {
-    console.log('handleToggleSpeaker')
     dispatch(toggleSpeaker());
   };
 
   const handleToggleMinimize = () => {
-    console.log('handleToggleMinimize')
     dispatch(toggleMinimize());
   };
-// Mobile view logic
+  // Mobile view logic
   const isMobile = window.innerWidth < 768;
   const renderCallModal = () => (
     <CallModal

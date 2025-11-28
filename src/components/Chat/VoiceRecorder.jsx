@@ -17,14 +17,25 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
   const timerRef = useRef(null);
   const streamRef = useRef(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      startRecording();
-    } else {
-      cleanup();
-    }
+  // useEffect(() => {
+  //   if (isOpen) {
+  //     startRecording();
+  //   } else {
+  //     cleanup();
+  //   }
 
-    return () => cleanup();
+  //   return () => cleanup();
+  // }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let timeout = setTimeout(() => startRecording(), 10);
+
+    return () => {
+      clearTimeout(timeout);
+      cleanup();
+    };
   }, [isOpen]);
 
   useEffect(() => {
@@ -40,6 +51,8 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
   }, [isRecording, isPaused]);
 
   const cleanup = () => {
+    setAudioBlob(null);
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
@@ -53,7 +66,6 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
     setIsRecording(false);
     setIsPaused(false);
     setRecordingTime(0);
-    setAudioBlob(null);
     setAudioUrl(null);
     setIsPlaying(false);
     setPlaybackTime(0);
@@ -72,13 +84,28 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
       });
       
       streamRef.current = stream;
+
+      let mimeType = "";
+      if (MediaRecorder.isTypeSupported("audio/webm")) {
+        mimeType = "audio/webm";
+      } 
+      else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+        mimeType = "audio/mp4";
+      } 
+      else {
+        mimeType = "";
+      }
       
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-      });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+
+      mediaRecorder.onerror = (e) => {
+        console.error("Recorder error: ", e.error);
+        alert("Recording failed. Please try again.");
+        cleanup();
+      };
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -87,9 +114,14 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { 
-          type: mediaRecorder.mimeType || 'audio/webm' 
-        });
+        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        if (!blob || blob.size === 0) {
+          console.warn("Empty blob, retrying...");
+          alert("No audio captured. Please re-record.");
+          return;
+        }
         setAudioBlob(blob);
         
         const url = URL.createObjectURL(blob);
@@ -100,9 +132,15 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
         audio.addEventListener('loadedmetadata', () => {
           setDuration(audio.duration);
         });
-      };
 
-      mediaRecorder.start(100); // Collect data every 100ms
+      };
+      
+      // Safari detection
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      
+      // start recodeing
+      mediaRecorder.start(isSafari ? undefined : 100); // Collect data every 100ms
+
       setIsRecording(true);
       setRecordingTime(0);
     } catch (error) {
@@ -127,12 +165,23 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
   };
 
   const stopRecording = () => {
+
+    if (!chunksRef.current.length) {
+      console.warn("No audio captured");
+      alert("No audio recorded. Please try again.");
+      cleanup();
+      return;
+    }
+    
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.requestData();
       mediaRecorderRef.current.stop();
     }
+
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
+
     setIsRecording(false);
     setIsPaused(false);
   };
@@ -196,6 +245,7 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
   };
 
   const handleCancel = () => {
+    stopRecording();
     cleanup();
     onClose();
   };
@@ -206,24 +256,24 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-2 pl-4 border-b">
           <h3 className="text-lg font-semibold text-gray-800">
             {isRecording ? 'Recording Voice Message' : 'Voice Message'}
           </h3>
-          <button
+          {/* <button
             onClick={handleCancel}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
             <X className="w-5 h-5 text-gray-500" />
-          </button>
+          </button> */}
         </div>
 
         {/* Recording Area */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 space-y-4">
           {/* Waveform Visualization (Mock) */}
-          <div className="flex items-center justify-center h-20 bg-gray-50 rounded-lg">
-            <div className="flex items-end space-x-1 h-12">
-              {Array.from({ length: 20 }).map((_, i) => (
+          <div className="flex items-center justify-center h-10 bg-gray-50 rounded-lg">
+            <div className="flex items-end space-x-1 h-8">
+              {Array.from({ length: 40 }).map((_, i) => (
                 <div
                   key={i}
                   className={`w-1 bg-green-500 rounded-full transition-all duration-300 ${
@@ -232,7 +282,7 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
                       : ''
                   }`}
                   style={{
-                    height: `${Math.random() * 100}%`,
+                    height: `${Math.random() * 80}%`,
                     minHeight: '4px',
                     opacity: isRecording && !isPaused ? 1 : 0.3
                   }}
@@ -246,7 +296,7 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
             <div className="text-3xl font-mono font-bold text-gray-800">
               {formatTime(recordingTime)}
             </div>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 mt-0">
               {isRecording 
                 ? isPaused 
                   ? 'Recording paused' 
@@ -260,7 +310,7 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
 
           {/* Playback Controls (when recording is done) */}
           {audioBlob && audioUrl && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               <audio
                 ref={audioRef}
                 src={audioUrl}
@@ -286,7 +336,7 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
                 </div>
                 <div className="flex justify-between text-xs text-gray-500">
                   <span>{formatTime(playbackTime)}</span>
-                  <span>{formatTime(duration)}</span>
+                  {/* <span>{formatTime(duration)}</span> */}
                 </div>
               </div>
 
@@ -294,7 +344,7 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
               <div className="flex justify-center">
                 <button
                   onClick={isPlaying ? pauseAudio : playAudio}
-                  className="p-3 bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
+                  className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
                 >
                   {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
                 </button>
@@ -303,7 +353,7 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
           )}
 
           {/* Recording Controls */}
-          <div className="flex items-center justify-center space-x-4">
+          <div className="flex items-center justify-center space-x-2 m-0">
             {isRecording ? (
               <>
                 <button
@@ -336,7 +386,7 @@ const VoiceRecorder = ({ isOpen, onClose, onSend }) => {
 
         {/* Footer Actions */}
         {audioBlob && (
-          <div className="flex items-center justify-between p-6 border-t bg-gray-50 rounded-b-2xl">
+          <div className="flex items-center justify-between p-2 border-t bg-gray-50 rounded-b-2xl">
             <button
               onClick={handleCancel}
               className="px-6 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"

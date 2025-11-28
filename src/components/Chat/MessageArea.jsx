@@ -43,6 +43,7 @@ const MessageArea = () => {
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
   const paperclipButtonRef = useRef(null);
+  const lastFetchedChatId = useRef(null);
   const currentChat = chats.find(chat => chat.chatId === activeChat);
   const chatMessages = messages[activeChat] || [];
   const participant = currentChat?.type !== 'group'
@@ -99,6 +100,8 @@ const MessageArea = () => {
 
   // নতুন useEffect: যখনই চ্যাট পরিবর্তন হবে, unread count রিসেট হবে এবং backend কে জানানো হবে।
   useEffect(() => {
+    console.log('currentChat', currentChat);
+    
     if (activeChat && currentChat && currentChat.unreadCount > 0) {
       dispatch(resetUnreadCount({ chatId: activeChat }));
       const notifyReceiverIds = currentChat.participants
@@ -151,15 +154,41 @@ const MessageArea = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (activeChat) {
-      dispatch(fetchMessages({ chatId: activeChat }));
-      // socketService.joinChat(activeChat);
+  // useEffect(() => {
+  //   if (activeChat) {
+  //     dispatch(fetchMessages({ chatId: activeChat }));
+  //     // socketService.joinChat(activeChat);
 
-      return () => {
-        // socketService.leaveChat(activeChat);
-      };
+  //     return () => {
+  //       // socketService.leaveChat(activeChat);
+  //     };
+  //   }
+  // }, [activeChat, dispatch]);
+
+  useEffect(() => {
+    // যদি activeChat না থাকে, কিছু করার দরকার নেই
+    if (!activeChat) return;
+
+    // ২. চেক করুন: বর্তমান activeChat কি আমরা আগেই ফেচ করেছি?
+    // যদি বর্তমান চ্যাট ID এবং lastFetchedChatId একই হয়, তার মানে এটি ডুপ্লিকেট কল।
+    if (lastFetchedChatId.current === activeChat) {
+      return; // ডুপ্লিকেট কল আটলানো হলো
     }
+
+    // ৩. যদি নতুন চ্যাট হয়, তাহলে ফেচ করুন এবং ref আপডেট করুন
+    lastFetchedChatId.current = activeChat;
+    dispatch(fetchMessages({ chatId: activeChat }));
+    
+    // socketService.joinChat(activeChat); // (যদি আপনার সকেট লজিক থাকে)
+
+    return () => {
+      // socketService.leaveChat(activeChat);
+      
+      // নোট: এখানে ref null করবেন না। কারণ Strict Mode-এ আনমাউন্ট হওয়ার পরও 
+      // আমরা চাই ref মনে রাখুক যে এই চ্যাটটি ফেচ হয়েছে।
+      // ব্যবহারকারী যখন অন্য চ্যাটে ক্লিক করবে, তখন activeChat চেঞ্জ হবে 
+      // এবং উপরের if কন্ডিশন (activeChat !== lastFetchedChatId) সত্য হবে, ফলে নতুন চ্যাট ফেচ হবে।
+    };
   }, [activeChat, dispatch]);
 
   // Focus input when replying

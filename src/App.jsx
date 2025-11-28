@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import {BrowserRouter, Navigate, Route, Routes} from "react-router-dom";
 import {Provider, useDispatch, useSelector} from "react-redux";
 import { store } from "./store/store";
@@ -11,42 +11,51 @@ import { clearAuth, setUser } from "./store/slices/authSlice.js";
 function AppRoutes() {
     const dispatch = useDispatch();
     const { user, isAuthenticated, loading } = useSelector((state) => state.auth);
-    const initializeAuth = async () => {
-        const storedToken = localStorage.getItem('token');
-        if (storedToken) {
-            try {
-                const response = await authAPI.getMe(storedToken);
-                dispatch(setUser(response.data)); // backend থেকে user object আসছে কিনা নিশ্চিত হও
-            } catch (error) {
-                console.error('Failed to initialize auth:', error);
-                dispatch(clearAuth());
-                localStorage.removeItem('token');
-            }
-        }
-    };
+    const isAuthInitialized = useRef(false);
 
+    // ১. Auth Initialization Effect
+    useEffect(() => {
+        const initializeAuth = async () => {
+            const storedToken = localStorage.getItem('token');
+            
+            // যদি টোকেন থাকে, ইউজার না থাকে এবং আমরা আগে কল না করে থাকি
+            if (storedToken && !user && !isAuthInitialized.current) {
+                isAuthInitialized.current = true; // ফ্ল্যাগ সেট করে দিন যাতে দ্বিতীয়বার কল না হয়
+
+                try {
+                    const response = await authAPI.getMe(storedToken);
+                    dispatch(setUser(response.data));
+                } catch (error) {
+                    console.error('Failed to initialize auth:', error);
+                    dispatch(clearAuth());
+                    localStorage.removeItem('token');
+                    isAuthInitialized.current = false; // ফেইল করলে ফ্ল্যাগ রিসেট করতে পারেন (অপশনাল)
+                }
+            }
+        };
+
+        initializeAuth();
+    }, [dispatch, user]); // এখানে isAuthenticated সরিয়ে দেওয়া যেতে পারে যদি শুধু user লোড করা লক্ষ্য হয়
+
+    // ২. Socket Connection Effect
     useEffect(() => {
         const storedToken = localStorage.getItem('token');
 
-        // Step 1: page reload হলে user restore করো
-        if (storedToken && !user) {
-            initializeAuth();
-        }
-
-        // Step 2: user আসলে তবেই socket connect করো
         if (storedToken && user && isAuthenticated) {
             if (!socketService.socket) {
                 socketService.connect(user.id, storedToken);
-                // socketService.initAgoraClient(); 
             }
         }
 
+        // Cleanup function
         return () => {
-            if (!storedToken) {
+            // সতর্কবার্তা: পেজ রিফ্রেশ বা ন্যাভিগেশনে সকেট যাতে হুট করে ডিসকানেক্ট না হয়, 
+            // সেটি আপনার অ্যাপের লজিকের ওপর নির্ভর করে। তবে আনমাউন্ট হলে ডিসকানেক্ট করা ভালো প্র্যাকটিস।
+            if (!storedToken){
                 socketService.disconnect();
             }
         };
-    }, [dispatch, user, isAuthenticated]);
+    }, [user, isAuthenticated]);
 
     if (loading) {
         return (
