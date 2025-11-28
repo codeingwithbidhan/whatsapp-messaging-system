@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react';
 import { loginUser, registerUser, clearError } from '../../store/slices/authSlice';
+import logo from '../../sound/logo.png';
 import toast from 'react-hot-toast';
 
 const Auth = () => {
@@ -85,11 +86,16 @@ const Auth = () => {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="bg-green-500 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-2xl font-bold">W</span>
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: '#00ff00' }}>
+            {/* <span className="text-white text-2xl font-bold">W</span> */}
+            <img
+              src={`${logo}`}
+              alt={`Bidhan Sutradahr`}
+              className="rounded-full object-cover"
+            />
           </div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">
-            {isLogin ? 'Welcome Back' : 'Create Account'}
+            {isLogin ? 'VK-Chat' : 'Create Account'}
           </h1>
           <p className="text-gray-600">
             {isLogin ? 'Sign in to continue messaging' : 'Join the conversation'}
