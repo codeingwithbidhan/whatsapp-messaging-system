@@ -15,6 +15,7 @@ export const createGroupChat = createAsyncThunk(
         all_members: participantIds, 
       };
       const response = await chatAPI.createGroupChatAPI(payload);
+      socketService.addContact(participantIds);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || 'Failed to create group chat');
@@ -48,8 +49,10 @@ export const createChat = createAsyncThunk(
   async ({ partnerId, type = 'direct' }, { rejectWithValue }) => {
     try {
       // Call the new API function
-      const response = await chatAPI.createChatAPI(partnerId); 
-      return response.data; // Assuming response.data is the newly created chat object
+      const response = await chatAPI.createChatAPI(partnerId);
+      console.log('from chat slice', partnerId);
+      socketService.addContact([partnerId]); // array wise send data for group reason.
+      return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || 'Failed to create chat');
     }

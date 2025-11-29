@@ -2,7 +2,7 @@
 import { io } from "socket.io-client";
 import AgoraRTC from 'agora-rtc-sdk-ng';
 import store from '../store/store';
-import { setOnlineUsers, receiveNewMessage, updateMessageStatus, setTyping } from '../store/slices/chatSlice';
+import { setOnlineUsers, receiveNewMessage, updateMessageStatus, setTyping, fetchChats } from '../store/slices/chatSlice';
 import { toast } from 'react-hot-toast';
 import {
     receiveIncomingCall,
@@ -87,6 +87,11 @@ class SocketService {
         // Listen online users
         this.socket.on('onlineUsers', (users) => {
             store.dispatch(setOnlineUsers(users));
+        });
+
+        this.socket.on('addContact', () => {
+            console.log('from chat slice receiver end');
+            store.dispatch(fetchChats());
         });
 
         // Listen new message
@@ -192,6 +197,16 @@ class SocketService {
 
     stopTyping(chatId, senderId, receiverIds) {
         this.socket?.emit('stopTyping', chatId, senderId, receiverIds);
+    }
+
+    
+    // ===========================
+    // add chat
+    // ===========================
+
+    addContact (partnerId) {
+        console.log('from socket', partnerId);
+        this.socket?.emit('addContact', { partnerId });
     }
 
     // ===========================
